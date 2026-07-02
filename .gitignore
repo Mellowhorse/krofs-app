@@ -1,0 +1,23 @@
+# secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# dependencies / build output
+node_modules/
+.next/
+dist/
+out/
+build/
+
+# supabase local / branches
+supabase/.temp/
+supabase/.branches/
+
+# vercel
+.vercel/
+
+# misc
+.DS_Store
+*.log
+npm-debug.log*
