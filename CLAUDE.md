@@ -106,8 +106,23 @@ See `docs/backend_design.md` for the full runtime design and 45-scenario test ma
 - `lib/send-guard.ts` — the no-real-sends guardrail (import before every send)
 - `.env.example` — config surface (copy to `.env`, never commit `.env`)
 
+## Scheduling — external, not pg_cron (runs on Supabase Free)
+Do NOT use `pg_cron` / `pg_net` (a paused Free project would kill them). Instead a
+free external scheduler (**Cloudflare Workers Cron Triggers**, `*/15 * * * *`; a
+daily trigger for token-expire; weekly for purge) calls authenticated sweep
+endpoints (`/tick` etc.) that run the due reminder/deadline/dispatch/build/watchdog
+work. These ticks hit the DB, which also keeps the Free project awake (no 7-day
+pause). All sweep logic is idempotent + time-based (e.g. close = "any round where
+`now() >= deadline_at`"), so a late/missed tick self-heals. Add a Healthchecks.io
+dead-man's-switch so a dead scheduler is caught before the 7-day pause. This
+OVERRIDES the pg_cron references in `docs/backend_design.md` (the sweep LOGIC is
+unchanged; only the trigger layer moves out of the DB). Datamodel is unaffected.
+
 ## Provisioning (Chris) — critical path = Meta
 Meta Business verification (days) -> dedicated sender number -> lock domain
-`bezoek.krofs.nl` -> submit UTILITY invite + reminder templates. New Supabase
-project on **Pro** (Free auto-pauses and kills cron). New Vercel + GCP projects.
-Twilio sandbox for dev.
+`bezoek.krofs.nl` -> submit UTILITY invite + reminder templates. Supabase on the
+**Free** tier is fine (dev + prod = the 2 free projects) given external scheduling
+above; the only Free trade-off is no automated backups — mitigate with a weekly
+`pg_dump` via the same scheduler, or upgrade the prod project to Pro (~EUR 25/mo)
+only at go-live with real PII. New Vercel + GCP projects. Cloudflare account (free)
+for the scheduler. Twilio sandbox for dev.
