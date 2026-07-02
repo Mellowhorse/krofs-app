@@ -76,19 +76,27 @@ Clients/inleners; opt-in bootstrap / consent capture (painters seeded opted_in);
 GDPR/AVG lawful-basis flows; the old 50% gate; anti-starvation/aging; native apps;
 drag-reorder + per-stop done-status on the dashboard.
 
-## Known drift — fix before time/route code
+## Known drift — reconciliation status
 The base schema (`db/001`) was generated before the reminder/deadline/grace
-decisions and before the backend design's concurrency columns. The reconciliation
-migration (`db/002`, not yet written) must:
-1. `reminder_at` -> next-day-same-wall-time (not `+24h`).
-2. `deadline_at` -> next-local-midnight of day 5, compare `now() < deadline_at`.
-3. Remove the grace / `is_late` path (keep `carry_over_from_invite_id` only as the
-   next-round re-invite link).
-4. Add missing columns: `route_plans.build_epoch/heartbeat_at/last_completed_visit_date`,
+decisions and before the backend design's concurrency columns.
+
+`db/002_reconcile.sql` — **written + adversarially reviewed, NOT yet applied**
+(apply only to the dev project after Chris's sign-off; it has a fresh-DB guard).
+It handles:
+1. `reminder_at` -> next-day-same-wall-time (not `+24h`). ✔
+2. `deadline_at` -> start of day 6 local (day-0 convention), compare `now() < deadline_at`;
+   `token_expires_at` now trigger-stamped = `deadline_at` so it can't diverge. ✔
+3. Drop the `is_late` remnant (hard stop); `carry_over_from_invite_id` kept only as the
+   next-round re-invite link. ✔
+4. Add missing columns: `route_plans.build_epoch/heartbeat_at/last_completed_visit_date/build_attempts`,
    `route_days.optimization_status`, `invite_responses.geocode_leased_until`,
-   `round_invites.send_attempts`.
-5. Add `visit_week_end` + upper-bound in `workday_in_window`.
-6. Address-level clustering / capacity counts addresses, not painters.
+   `round_invites.send_attempts` (+ watchdog/geocode-claim indexes). ✔
+5. Add `visit_week_end` + both-bounds `workday_in_window`; visit window = first Mon–Fri
+   strictly after the deadline date (send-weekday-independent). ✔
+
+**Deferred to `db/003`** (Phase 4 only): the `route_stops` address-level clustering
+refactor — one 30-min stop per ADDRESS with painters as a child, capacity counts
+addresses. `route_stops` stays 1:1 response↔painter until then.
 
 See `docs/backend_design.md` for the full runtime design and 45-scenario test matrix.
 
