@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  migrations:
+    name: migrations apply + smoke tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: CI stubs (auth schema + roles)
+        run: psql -v ON_ERROR_STOP=1 -f db/tests/ci_stubs.sql
+
+      - name: Apply db/001 (base schema)
+        run: psql -v ON_ERROR_STOP=1 -f db/001_initial_schema.sql
+
+      - name: Apply db/002 (reconciliation)
+        run: psql -v ON_ERROR_STOP=1 -f db/002_reconcile.sql
+
+      - name: Apply db/003 (product improvements)
+        run: psql -v ON_ERROR_STOP=1 -f db/003_product_improvements.sql
+
+      - name: Seed (synthetic dev data must load cleanly)
+        run: psql -v ON_ERROR_STOP=1 -f db/seed_dev.sql
+
+      - name: Smoke tests
+        run: psql -v ON_ERROR_STOP=1 -f db/tests/smoke_test.sql

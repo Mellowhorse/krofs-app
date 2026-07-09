@@ -71,10 +71,34 @@ Accepted defaults: concrete-date picker; single-use link, no edit after submit;
 geocode retry 5x with backoff; "ik werk deze week niet" button; per-token +
 per-IP rate limiting via a shared store (Upstash / Vercel KV).
 
+## Product improvements v4 (approved by Chris, in db/003)
+1. **Location freshness** — the form asks for the address of the **visit week**
+   ("waar werk je in de week van 13–17 juli?"), not "this week". Plus a
+   day-before **location-confirm ping** (`message_kind='location_confirm'`,
+   `invite_responses.location_confirm_sent_at/location_confirmed_at`) — visits
+   happen 8–13 days after fill-in while locations change weekly; this was the
+   v1-identified top failure mode, reinstated.
+2. **Visit tracking** — `route_stops.visited_at` ("gezien" tap) +
+   `painter_last_visited` view = Ruben's original "bijhouden wie je gezien
+   hebt" ask. Enables a later longest-unseen-first priority rule for free.
+3. **Prefill** — the form opens with "Werk je nog steeds op <laatste adres>?"
+   [Ja] [Nee, ander adres] via the `painter_last_address` view. One tap for
+   painters on long-running sites; the explicit confirm preserves the
+   fresh-per-round guarantee. (Supersedes the earlier "no prefill" default.)
+4. **Inbound fallback** — painters who reply in WhatsApp instead of using the
+   link: inbound rows land in an unhandled queue (`message_log.handled_at`
+   null) on the dashboard so Ruben can enter the answer manually.
+5. **`deadline_days` org setting** (default 5 = locked value) — the pilot can
+   shorten the collection window without a migration.
+6. **Route-ready notification** to Ruben (`message_kind='route_ready'`) via the
+   outbox when a plan reaches `ready`; channel = third UTILITY template or
+   e-mail, decide at template submission.
+
 ## De-scoped (do NOT build for MVP)
 Clients/inleners; opt-in bootstrap / consent capture (painters seeded opted_in);
-GDPR/AVG lawful-basis flows; the old 50% gate; anti-starvation/aging; native apps;
-drag-reorder + per-stop done-status on the dashboard.
+GDPR/AVG lawful-basis flows; the old 50% gate; anti-starvation/aging (the data
+for it now exists via `visited_at`, the rule itself stays out); native apps;
+drag-reorder on the dashboard.
 
 ## Known drift — reconciliation status
 The base schema (`db/001`) was generated before the reminder/deadline/grace
@@ -94,14 +118,29 @@ It handles:
 5. Add `visit_week_end` + both-bounds `workday_in_window`; visit window = first Mon–Fri
    strictly after the deadline date (send-weekday-independent). ✔
 
-**Deferred to `db/003`** (Phase 4 only): the `route_stops` address-level clustering
+`db/003_product_improvements.sql` — **written, NOT yet applied**: the v4 product
+improvements above (deadline_days, visited_at + views, location-confirm columns,
+inbound handled_at, new message_kind values).
+
+**Deferred to `db/004`** (Phase 4 only): the `route_stops` address-level clustering
 refactor — one 30-min stop per ADDRESS with painters as a child, capacity counts
 addresses. `route_stops` stays 1:1 response↔painter until then.
+
+**CI is the enforcement layer**: `.github/workflows/ci.yml` applies
+`db/tests/ci_stubs.sql` → 001 → 002 → 003 → `db/seed_dev.sql` on a fresh
+Postgres 16 and runs `db/tests/smoke_test.sql` (executable subset of the
+45-scenario matrix: DST reminder, midnight deadline, visit-window bounds,
+token-expiry stamping). Every new migration must pass CI before sign-off.
 
 See `docs/backend_design.md` for the full runtime design and 45-scenario test matrix.
 
 ## Repo layout
-- `db/` — numbered SQL migrations (`001_initial_schema.sql` = base, `002` = reconciliation, ...)
+- `db/` — numbered SQL migrations (`001` base, `002` reconciliation, `003` product
+  improvements, `004` = deferred clustering refactor)
+- `db/seed_dev.sql` — synthetic dev data (fake painters, never real numbers)
+- `db/tests/` — `ci_stubs.sql` (auth schema/roles for plain Postgres) +
+  `smoke_test.sql` (executable invariants)
+- `.github/workflows/ci.yml` — applies all migrations + runs smoke tests on PG16
 - `docs/` — `bouwbrief.md` (datamodel walkthrough), `backend_design.md` (runtime + correctness)
 - `lib/send-guard.ts` — the no-real-sends guardrail (import before every send)
 - `.env.example` — config surface (copy to `.env`, never commit `.env`)
@@ -120,7 +159,8 @@ unchanged; only the trigger layer moves out of the DB). Datamodel is unaffected.
 
 ## Provisioning (Chris) — critical path = Meta
 Meta Business verification (days) -> dedicated sender number -> lock domain
-`bezoek.krofs.nl` -> submit UTILITY invite + reminder templates. Supabase on the
+`bezoek.krofs.nl` -> submit UTILITY templates: **invite, reminder,
+location-confirm** (and optionally route-ready, or use e-mail for that one). Supabase on the
 **Free** tier is fine (dev + prod = the 2 free projects) given external scheduling
 above; the only Free trade-off is no automated backups — mitigate with a weekly
 `pg_dump` via the same scheduler, or upgrade the prod project to Pro (~EUR 25/mo)

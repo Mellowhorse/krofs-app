@@ -1,0 +1,181 @@
+-- ============================================================================
+-- Smoke tests — executable subset of the 45-scenario test matrix
+-- (docs/backend_design.md). Runs in CI after db/001..003 on a fresh DB.
+-- Every block raises on failure; last line prints ALL SMOKE TESTS PASSED.
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- Fixtures (fixed UUIDs so blocks can reference each other)
+-- ---------------------------------------------------------------------------
+insert into organizations (id, name)
+values ('00000000-0000-0000-0000-0000000000a1', 'Krofs CI')
+on conflict (id) do nothing;
+
+insert into organizations (id, name, deadline_days)
+values ('00000000-0000-0000-0000-0000000000a2', 'Krofs CI kort', 3)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- T1 — Monday send: anchors (wall-time reminder, midnight deadline, Mon–Fri window)
+-- ---------------------------------------------------------------------------
+do $$
+declare r weekrondes%rowtype;
+begin
+  insert into weekrondes (id, org_id, label, sent_at)
+  values ('00000000-0000-0000-0000-0000000000b1',
+          '00000000-0000-0000-0000-0000000000a1',
+          'T1 ma-send',
+          ('2026-07-06 09:00'::timestamp at time zone 'Europe/Amsterdam'))
+  returning * into r;
+
+  if r.reminder_at is distinct from ('2026-07-07 09:00'::timestamp at time zone 'Europe/Amsterdam') then
+    raise exception 'T1 reminder_at wrong: %', r.reminder_at;
+  end if;
+  if r.deadline_at is distinct from ('2026-07-12 00:00'::timestamp at time zone 'Europe/Amsterdam') then
+    raise exception 'T1 deadline_at wrong (expected start of day 6 = Sun 12 Jul 00:00 local): %', r.deadline_at;
+  end if;
+  if r.visit_week_start is distinct from date '2026-07-13' or r.visit_week_end is distinct from date '2026-07-17' then
+    raise exception 'T1 visit window wrong: % .. %', r.visit_week_start, r.visit_week_end;
+  end if;
+  raise notice 'T1 ok — Monday-send anchors';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- T2 — DST spring-forward: reminder keeps local wall-time (23h elapsed)
+--      Send Sat 2026-03-28 09:00 CET; clocks jump Sun 2026-03-29 02:00->03:00.
+-- ---------------------------------------------------------------------------
+do $$
+declare r weekrondes%rowtype;
+begin
+  insert into weekrondes (id, org_id, label, sent_at)
+  values ('00000000-0000-0000-0000-0000000000b2',
+          '00000000-0000-0000-0000-0000000000a1',
+          'T2 dst',
+          ('2026-03-28 09:00'::timestamp at time zone 'Europe/Amsterdam'))
+  returning * into r;
+
+  if (r.reminder_at at time zone 'Europe/Amsterdam')::time is distinct from time '09:00' then
+    raise exception 'T2 reminder local wall-time wrong: %', r.reminder_at at time zone 'Europe/Amsterdam';
+  end if;
+  if r.reminder_at - r.sent_at is distinct from interval '23 hours' then
+    raise exception 'T2 expected 23h elapsed across spring-forward, got %', r.reminder_at - r.sent_at;
+  end if;
+  raise notice 'T2 ok — DST-safe reminder';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- T3 — deadline_days org setting: 3 days -> closes start of day 4
+-- ---------------------------------------------------------------------------
+do $$
+declare r weekrondes%rowtype;
+begin
+  insert into weekrondes (id, org_id, label, sent_at)
+  values ('00000000-0000-0000-0000-0000000000b3',
+          '00000000-0000-0000-0000-0000000000a2',
+          'T3 kort',
+          ('2026-07-06 09:00'::timestamp at time zone 'Europe/Amsterdam'))
+  returning * into r;
+
+  if r.deadline_at is distinct from ('2026-07-10 00:00'::timestamp at time zone 'Europe/Amsterdam') then
+    raise exception 'T3 deadline_at wrong for deadline_days=3: %', r.deadline_at;
+  end if;
+  if r.visit_week_start is distinct from date '2026-07-13' then
+    raise exception 'T3 visit_week_start wrong: %', r.visit_week_start;
+  end if;
+  raise notice 'T3 ok — configurable deadline_days';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- T4 — token_expires_at auto-stamped = round deadline_at on send
+-- ---------------------------------------------------------------------------
+do $$
+declare inv round_invites%rowtype; dl timestamptz;
+begin
+  insert into painters (id, org_id, full_name, wa_phone_e164, wa_opt_in_status)
+  values ('00000000-0000-0000-0000-0000000000c1',
+          '00000000-0000-0000-0000-0000000000a1',
+          'CI Schilder', '+31610000001', 'opted_in');
+
+  insert into round_invites (id, round_id, painter_id, org_id, token_hash, status, invite_sent_at)
+  values ('00000000-0000-0000-0000-0000000000d1',
+          '00000000-0000-0000-0000-0000000000b1',
+          '00000000-0000-0000-0000-0000000000c1',
+          '00000000-0000-0000-0000-0000000000a1',
+          encode(digest('ci-token-1', 'sha256'), 'hex'),
+          'sent', now())
+  returning * into inv;
+
+  select deadline_at into dl from weekrondes where id = inv.round_id;
+  if inv.token_expires_at is distinct from dl then
+    raise exception 'T4 token_expires_at (%) <> round deadline_at (%)', inv.token_expires_at, dl;
+  end if;
+  raise notice 'T4 ok — token expiry = deadline';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- T5 — workday window: inside accepted; below/above the window rejected
+-- ---------------------------------------------------------------------------
+do $$
+declare vws date; vwe date; rejected boolean;
+begin
+  insert into invite_responses (id, invite_id, round_id, org_id, straat, huisnummer, plaats)
+  values ('00000000-0000-0000-0000-0000000000e1',
+          '00000000-0000-0000-0000-0000000000d1',
+          '00000000-0000-0000-0000-0000000000b1',
+          '00000000-0000-0000-0000-0000000000a1',
+          'Stationsplein', '12', 'Amersfoort');
+
+  select visit_week_start, visit_week_end into vws, vwe
+    from weekrondes where id = '00000000-0000-0000-0000-0000000000b1';
+
+  -- inside: must succeed
+  insert into response_workdays (response_id, round_id, work_date, weekday)
+  values ('00000000-0000-0000-0000-0000000000e1',
+          '00000000-0000-0000-0000-0000000000b1',
+          vws, extract(isodow from vws)::smallint);
+
+  -- below lower bound: must be rejected
+  rejected := false;
+  begin
+    insert into response_workdays (response_id, round_id, work_date, weekday)
+    values ('00000000-0000-0000-0000-0000000000e1',
+            '00000000-0000-0000-0000-0000000000b1',
+            vws - 1, extract(isodow from vws - 1)::smallint);
+  exception when others then rejected := true;
+  end;
+  if not rejected then
+    raise exception 'T5 work_date below visit_week_start was accepted';
+  end if;
+
+  -- above upper bound: must be rejected (the db/002 both-bounds fix)
+  rejected := false;
+  begin
+    insert into response_workdays (response_id, round_id, work_date, weekday)
+    values ('00000000-0000-0000-0000-0000000000e1',
+            '00000000-0000-0000-0000-0000000000b1',
+            vwe + 1, extract(isodow from vwe + 1)::smallint);
+  exception when others then rejected := true;
+  end;
+  if not rejected then
+    raise exception 'T5 work_date above visit_week_end was accepted';
+  end if;
+
+  raise notice 'T5 ok — workday window bounds';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- T6 — db/003 surface: enum values, columns, views
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  perform 'location_confirm'::message_kind;
+  perform 'route_ready'::message_kind;
+  perform visited_at from route_stops limit 0;
+  perform location_confirm_sent_at, location_confirmed_at from invite_responses limit 0;
+  perform handled_at from message_log limit 0;
+  perform * from painter_last_visited limit 0;
+  perform * from painter_last_address limit 0;
+  raise notice 'T6 ok — db/003 surface present';
+end $$;
+
+select 'ALL SMOKE TESTS PASSED' as result;
