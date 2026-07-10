@@ -178,4 +178,40 @@ begin
   raise notice 'T6 ok — db/003 surface present';
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- T7 — painter RPCs (db/005): get, cross-token isolation, submit, single-use
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := '00000000-0000-0000-0000-0000000000e1';
+  v_p1  uuid := '00000000-0000-0000-0000-0000000000e2';
+  v_p2  uuid := '00000000-0000-0000-0000-0000000000e3';
+  v_rnd uuid := '00000000-0000-0000-0000-0000000000e4';
+  tokA text := 'SMOKETOKENA-aaaa11112222';
+  tokB text := 'SMOKETOKENB-bbbb33334444';
+  vws date; r jsonb; n int;
+begin
+  insert into organizations (id,name) values (v_org,'rpc-smoke');
+  insert into painters (id,org_id,full_name,wa_phone_e164,wa_opt_in_status) values
+    (v_p1,v_org,'Een','+31610009001','opted_in'),
+    (v_p2,v_org,'Twee','+31610009002','opted_in');
+  insert into weekrondes (id,org_id,label,status,sent_at)
+    values (v_rnd,v_org,'smoke','collecting', now());
+  select visit_week_start into vws from weekrondes where id=v_rnd;
+  insert into round_invites (round_id,painter_id,org_id,token_hash,status,invite_sent_at) values
+    (v_rnd,v_p1,v_org, encode(digest(tokA,'sha256'),'hex'),'sent',now()),
+    (v_rnd,v_p2,v_org, encode(digest(tokB,'sha256'),'hex'),'sent',now());
+
+  r := get_invite_by_token(tokA);
+  if (r->>'ok')<>'true' or (r->>'painter_name')<>'Een' then raise exception 'RPC get valid: %', r; end if;
+  r := get_invite_by_token(tokB);
+  if (r->>'painter_name')<>'Twee' then raise exception 'RPC cross-token isolation: %', r; end if;
+  r := submit_response(tokA,'Straat','1','1234 AB','Amersfoort', array[vws]::date[], false);
+  if (r->>'ok')<>'true' then raise exception 'RPC valid submit: %', r; end if;
+  r := submit_response(tokA,'Straat','1','1234 AB','Amersfoort', array[vws]::date[], false);
+  if (r->>'reason')<>'used' then raise exception 'RPC single-use: %', r; end if;
+  select count(*) into n from response_workdays; if n < 1 then raise exception 'RPC workday not written'; end if;
+  raise notice 'T7 ok — painter RPCs';
+end $$;
+
 select 'ALL SMOKE TESTS PASSED' as result;

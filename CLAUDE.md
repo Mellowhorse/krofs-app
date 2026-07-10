@@ -132,7 +132,15 @@ MCP**: 001→002→003→004 all live; 12 tables + RLS; time invariants verified
 the real DB (reminder next-day-same-walltime, deadline day-0 midnight, visit window
 Mon–Fri after deadline, DST 23h check, deadline_days default 5). Region = eu-west-3.
 
-**Deferred to `db/005`** (Phase 4 only): the `route_stops` address-level clustering
+`db/005_painter_rpcs.sql` — **APPLIED to dev + adversarially tested (9/9) against
+the real DB, security-advisor clean**: the no-login painter gateway.
+`get_invite_by_token` + `submit_response` (SECURITY DEFINER, service_role only,
+sha256 token, fail-closed, single-use atomic claim, cross-token/tenant safe,
+workdays validated in-window, prefill via `painter_last_address`, "geen werk" path).
+The Next.js `/r/{token}` SERVER route calls these with the service_role key; the
+browser never touches them. RPC regression tests added to `db/tests/smoke_test.sql`.
+
+**Deferred to `db/006`** (Phase 4 only): the `route_stops` address-level clustering
 refactor — one 30-min stop per ADDRESS with painters as a child, capacity counts
 addresses. `route_stops` stays 1:1 response↔painter until then.
 
@@ -146,7 +154,8 @@ See `docs/backend_design.md` for the full runtime design and 45-scenario test ma
 
 ## Repo layout
 - `db/` — numbered SQL migrations (`001` base, `002` reconciliation, `003` product
-  improvements, `004` security hardening, `005` = deferred clustering refactor)
+  improvements, `004` security hardening, `005` painter RPCs, `006` = deferred
+  clustering refactor)
 - `db/seed_dev.sql` — synthetic dev data (fake painters, never real numbers)
 - `db/tests/` — `ci_stubs.sql` (auth schema/roles for plain Postgres) +
   `smoke_test.sql` (executable invariants)
