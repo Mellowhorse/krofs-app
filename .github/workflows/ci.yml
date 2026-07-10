@@ -49,6 +49,9 @@ jobs:
       - name: Apply db/005 (painter RPCs)
         run: psql -v ON_ERROR_STOP=1 -f db/005_painter_rpcs.sql
 
+      - name: Apply db/006 (round dispatch)
+        run: psql -v ON_ERROR_STOP=1 -f db/006_round_dispatch.sql
+
       - name: Seed (synthetic dev data must load cleanly)
         run: psql -v ON_ERROR_STOP=1 -f db/seed_dev.sql
 

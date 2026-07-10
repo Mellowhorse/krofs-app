@@ -140,7 +140,15 @@ workdays validated in-window, prefill via `painter_last_address`, "geen werk" pa
 The Next.js `/r/{token}` SERVER route calls these with the service_role key; the
 browser never touches them. RPC regression tests added to `db/tests/smoke_test.sql`.
 
-**Deferred to `db/006`** (Phase 4 only): the `route_stops` address-level clustering
+`db/006_round_dispatch.sql` — Phase 2 start: `start_weekronde` (admin opens a round,
+mints one invite + token per eligible painter, returns raw tokens ONCE) and
+`regenerate_invite_tokens` (re-mint links for not-yet-responded invites). MVP
+dispatch is MANUAL — the admin sends the returned `wa.me` links; the automated
+Meta outbox (message_log queued → BSP) is Phase-2b, once Meta is verified.
+Admin UI: `/admin/rondes` (start round, show/regenerate wa.me links, close round).
+APPLIED to dev + browser-verified (start round → 4 links → link opens the form).
+
+**Deferred to `db/007`** (Phase 4 only): the `route_stops` address-level clustering
 refactor — one 30-min stop per ADDRESS with painters as a child, capacity counts
 addresses. `route_stops` stays 1:1 response↔painter until then.
 
@@ -159,8 +167,8 @@ See `docs/backend_design.md` for the full runtime design and 45-scenario test ma
   service_role key never reaches the browser via `import "server-only"`). Env in
   `web/.env.local` (gitignored). Run: `npm --prefix web run dev` (port 3100).
 - `db/` — numbered SQL migrations (`001` base, `002` reconciliation, `003` product
-  improvements, `004` security hardening, `005` painter RPCs, `006` = deferred
-  clustering refactor)
+  improvements, `004` security hardening, `005` painter RPCs, `006` round dispatch,
+  `007` = deferred clustering refactor)
 - `db/seed_dev.sql` — synthetic dev data (fake painters, never real numbers)
 - `db/tests/` — `ci_stubs.sql` (auth schema/roles for plain Postgres) +
   `smoke_test.sql` (executable invariants)

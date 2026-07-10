@@ -165,3 +165,18 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .pill-ok { background: var(--success-bg); color: var(--success); }
 .pill-invalid { background: #fcebeb; color: #a32d2d; }
 .pill-dup_csv, .pill-dup_db { background: var(--bg); color: var(--muted); }
+
+/* ---------- rondes ---------- */
+.roundcard { background: #fff; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 8px; }
+.roundcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.roundcard-title { font-weight: 600; font-size: 16px; }
+.pill-ok { background: var(--success-bg); color: var(--success); }
+
+.links { margin-top: 18px; }
+.linkrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 0.5px solid var(--border); }
+.linkrow-name { font-weight: 500; font-size: 14px; }
+.linkrow-phone { font-size: 13px; }
+.linkrow-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.btn-sm { font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 0.5px solid var(--border-strong); background: #fff; color: var(--text); cursor: pointer; text-decoration: none; font-family: inherit; white-space: nowrap; }
+.btn-sm:hover { background: var(--bg); }
+.btn-wa { background: #25D366; color: #073d1c; border-color: #1eb257; font-weight: 500; }

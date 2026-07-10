@@ -17,7 +17,7 @@
 -- Covers: R1 reminder_at, R2 deadline_at (+ token_expires_at consistency),
 --         R3 visit window (+visit_week_end, upper bound), R4 drop is_late
 --         remnant, R5 concurrency/watchdog/geocode columns + indexes.
--- DEFERRED to db/006 (do NOT do here): the route_stops address-level
+-- DEFERRED to db/007 (do NOT do here): the route_stops address-level
 --         clustering refactor — see the block at the very bottom.
 -- ============================================================================
 
@@ -331,13 +331,13 @@ comment on column weekrondes.visit_week_end is
 commit;
 
 -- ============================================================================
--- DEFERRED to db/006 — DO NOT IMPLEMENT HERE.
+-- DEFERRED to db/007 — DO NOT IMPLEMENT HERE.
 -- ----------------------------------------------------------------------------
 -- Address-level clustering refactor of route_stops: one 30-minute stop per
 -- ADDRESS (not per painter), with painters as a CHILD of the stop, and
 -- capacity/oversubscription counting ADDRESSES rather than painters. This only
 -- affects Phase 4 route building and is intentionally left out of db/002 to
 -- keep this migration a pure reconciliation of time/window/concurrency drift.
--- Track it as db/006. (route_stops today still references response_id +
+-- Track it as db/007. (route_stops today still references response_id +
 -- painter_id 1:1 — that stays until 003.)
 -- ============================================================================
