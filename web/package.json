@@ -7,16 +7,17 @@
     "start": "next start -p 3100"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.48.1",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@supabase/supabase-js": "^2.48.1",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
     "@types/node": "^20.17.0",
     "@types/react": "^19.0.8",
-    "@types/react-dom": "^19.0.3"
+    "@types/react-dom": "^19.0.3",
+    "typescript": "^5.7.3"
   }
 }
