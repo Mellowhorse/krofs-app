@@ -153,6 +153,11 @@ token-expiry stamping). Every new migration must pass CI before sign-off.
 See `docs/backend_design.md` for the full runtime design and 45-scenario test matrix.
 
 ## Repo layout
+- `web/` — Next.js app (App Router). `/r/[token]` painter form: server component
+  calls `get_invite_by_token`; `PainterForm` (client) posts a server action to
+  `submit_response`. `lib/supabaseAdmin.ts` = server-only admin client (the
+  service_role key never reaches the browser via `import "server-only"`). Env in
+  `web/.env.local` (gitignored). Run: `npm --prefix web run dev` (port 3100).
 - `db/` — numbered SQL migrations (`001` base, `002` reconciliation, `003` product
   improvements, `004` security hardening, `005` painter RPCs, `006` = deferred
   clustering refactor)
