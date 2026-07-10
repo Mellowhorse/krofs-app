@@ -43,6 +43,9 @@ jobs:
       - name: Apply db/003 (product improvements)
         run: psql -v ON_ERROR_STOP=1 -f db/003_product_improvements.sql
 
+      - name: Apply db/004 (security hardening)
+        run: psql -v ON_ERROR_STOP=1 -f db/004_security_hardening.sql
+
       - name: Seed (synthetic dev data must load cleanly)
         run: psql -v ON_ERROR_STOP=1 -f db/seed_dev.sql
 

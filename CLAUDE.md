@@ -118,11 +118,21 @@ It handles:
 5. Add `visit_week_end` + both-bounds `workday_in_window`; visit window = first Mon–Fri
    strictly after the deadline date (send-weekday-independent). ✔
 
-`db/003_product_improvements.sql` — **written, NOT yet applied**: the v4 product
-improvements above (deadline_days, visited_at + views, location-confirm columns,
-inbound handled_at, new message_kind values).
+`db/003_product_improvements.sql` — the v4 product improvements above
+(deadline_days, visited_at + views, location-confirm columns, inbound handled_at,
+new message_kind values).
 
-**Deferred to `db/004`** (Phase 4 only): the `route_stops` address-level clustering
+`db/004_security_hardening.sql` — pins `search_path` on the 7 trigger functions
+and locks down `anonymize_painter` (service_role only) + `is_admin_of` (removes
+anon; authenticated kept for RLS). Clears all Supabase security-advisor findings
+except the accepted "authenticated can execute is_admin_of" (by-design RLS helper).
+
+**APPLIED to the dev project `wxhsyifejwlbothenjve` (2026-07-10) via the Supabase
+MCP**: 001→002→003→004 all live; 12 tables + RLS; time invariants verified against
+the real DB (reminder next-day-same-walltime, deadline day-0 midnight, visit window
+Mon–Fri after deadline, DST 23h check, deadline_days default 5). Region = eu-west-3.
+
+**Deferred to `db/005`** (Phase 4 only): the `route_stops` address-level clustering
 refactor — one 30-min stop per ADDRESS with painters as a child, capacity counts
 addresses. `route_stops` stays 1:1 response↔painter until then.
 
@@ -136,7 +146,7 @@ See `docs/backend_design.md` for the full runtime design and 45-scenario test ma
 
 ## Repo layout
 - `db/` — numbered SQL migrations (`001` base, `002` reconciliation, `003` product
-  improvements, `004` = deferred clustering refactor)
+  improvements, `004` security hardening, `005` = deferred clustering refactor)
 - `db/seed_dev.sql` — synthetic dev data (fake painters, never real numbers)
 - `db/tests/` — `ci_stubs.sql` (auth schema/roles for plain Postgres) +
   `smoke_test.sql` (executable invariants)
