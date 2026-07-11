@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { startRonde, regenerateLinks, closeRonde, type SendLink } from "./actions";
+import {
+  startRonde,
+  dispatchNow,
+  regenerateLinks,
+  closeRonde,
+  type SendLink,
+} from "./actions";
 
 export type ActiveRound = {
   id: string;
@@ -10,13 +16,13 @@ export type ActiveRound = {
   visit_week_start: string | null;
   visit_week_end: string | null;
   invitesTotal: number;
+  pendingCount: number;
   respondedCount: number;
 };
 
 function fmt(d: string | null): string {
   if (!d) return "—";
-  const dt = new Date(d);
-  return dt.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+  return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 }
 
 function LinkList({ links }: { links: SendLink[] }) {
@@ -24,10 +30,8 @@ function LinkList({ links }: { links: SendLink[] }) {
   return (
     <div className="links">
       <p className="intro">
-        {links.length} verzendlink{links.length === 1 ? "" : "s"}. Tik op
-        &ldquo;WhatsApp&rdquo; om het bericht met link te openen, of kopieer de
-        link. <strong>Sluit dit scherm niet</strong> zonder te versturen — met
-        &ldquo;Toon verzendlinks&rdquo; maak je nieuwe.
+        {links.length} handmatige link{links.length === 1 ? "" : "s"}. Tik
+        &ldquo;WhatsApp&rdquo; om het bericht te openen, of kopieer de link.
       </p>
       {links.map((l) => (
         <div className="linkrow" key={l.url}>
@@ -59,19 +63,35 @@ function LinkList({ links }: { links: SendLink[] }) {
 export default function RondeClient({ active }: { active: ActiveRound | null }) {
   const [label, setLabel] = useState("");
   const [links, setLinks] = useState<SendLink[] | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   function doStart() {
     setError(null);
+    setMsg(null);
     start(async () => {
       const res = await startRonde(label);
       if (!res.ok) setError(res.error ?? "Starten mislukt.");
-      else setLinks(res.links ?? []);
+      else {
+        setMsg(`Ronde gestart — ${res.count} schilder(s) uitgenodigd.`);
+        setTimeout(() => location.reload(), 700);
+      }
+    });
+  }
+  function doDispatch() {
+    setError(null);
+    setMsg(null);
+    setLinks(null);
+    start(async () => {
+      const res = await dispatchNow();
+      if (!res.ok) setError(res.error ?? "Versturen mislukt.");
+      else setMsg(res.summary ?? "Klaar.");
     });
   }
   function doRegen(id: string) {
     setError(null);
+    setMsg(null);
     start(async () => {
       const res = await regenerateLinks(id);
       if (!res.ok) setError(res.error ?? "Mislukt.");
@@ -83,16 +103,14 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
     start(async () => {
       const res = await closeRonde(id);
       if (!res.ok) setError(res.error ?? "Sluiten mislukt.");
-      else {
-        setLinks(null);
-        location.reload();
-      }
+      else location.reload();
     });
   }
 
   return (
     <div>
       {error ? <div className="banner err">{error}</div> : null}
+      {msg ? <div className="banner ok">{msg}</div> : null}
 
       {active ? (
         <div className="roundcard">
@@ -100,21 +118,29 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
             <div>
               <div className="roundcard-title">{active.label ?? "Actieve ronde"}</div>
               <div className="muted">
-                {active.respondedCount}/{active.invitesTotal} gereageerd · deadline{" "}
-                {fmt(active.deadline_at)} · bezoekweek {fmt(active.visit_week_start)}–
-                {fmt(active.visit_week_end)}
+                {active.respondedCount}/{active.invitesTotal} gereageerd ·{" "}
+                {active.pendingCount} nog te versturen · deadline {fmt(active.deadline_at)} ·
+                bezoekweek {fmt(active.visit_week_start)}–{fmt(active.visit_week_end)}
               </div>
             </div>
             <span className="pill pill-ok">loopt</span>
           </div>
-          <div className="row-actions" style={{ display: "flex", gap: 8 }}>
+          <div className="row-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               className="btn btn-primary"
               style={{ width: "auto", padding: "9px 16px" }}
               disabled={pending}
+              onClick={doDispatch}
+            >
+              {pending ? "Bezig…" : "Verstuur berichten nu"}
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
+              disabled={pending}
               onClick={() => doRegen(active.id)}
             >
-              {pending ? "Bezig…" : "Toon verzendlinks"}
+              Toon verzendlinks (handmatig)
             </button>
             <button
               className="btn btn-ghost"
@@ -125,12 +151,16 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
               Sluit ronde
             </button>
           </div>
+          <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+            Berichten gaan automatisch via de cron; &ldquo;Verstuur nu&rdquo; doet het
+            direct. In sandbox-modus is dit een test (geen echte WhatsApp).
+          </p>
         </div>
       ) : (
         <div className="roundcard">
           <p className="intro">
             Geen actieve ronde. Start er een — alle actieve schilders met opt-in
-            krijgen een unieke link.
+            krijgen een unieke link via WhatsApp.
           </p>
           <p className="flabel">Naam (optioneel)</p>
           <input

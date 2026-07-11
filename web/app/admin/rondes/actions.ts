@@ -2,15 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { runTick } from "@/lib/sweeps";
 
-export type SendLink = {
-  name: string;
-  phone: string;
-  url: string;
-  waLink: string;
-};
+export type SendLink = { name: string; phone: string; url: string; waLink: string };
 
-type RpcRow = {
+type RegenRow = {
   invite_id: string;
   painter_id: string;
   full_name: string;
@@ -18,34 +14,38 @@ type RpcRow = {
   raw_token: string;
 };
 
-function buildLinks(rows: RpcRow[]): SendLink[] {
-  const base = process.env.PUBLIC_BASE_URL || "http://localhost:3100";
-  return rows.map((r) => {
-    const first = r.full_name.split(" ")[0];
-    const url = `${base}/r/${r.raw_token}`;
-    const msg = `Hoi ${first}, Ruben (Krofs) komt binnenkort langs voor een kop koffie. Geef even door waar je werkt en op welke dagen: ${url}`;
-    const waLink = `https://wa.me/${r.wa_phone_e164.replace(/^\+/, "")}?text=${encodeURIComponent(msg)}`;
-    return { name: r.full_name, phone: r.wa_phone_e164, url, waLink };
-  });
-}
-
 export async function startRonde(
   label: string,
-): Promise<{ ok: boolean; links?: SendLink[]; error?: string }> {
+): Promise<{ ok: boolean; count?: number; error?: string }> {
   const supabase = await supabaseServer();
   const { data, error } = await supabase.rpc("start_weekronde", {
     p_label: label || null,
     p_painter_ids: null,
   });
   if (error) return { ok: false, error: error.message };
-  if (!data || (data as RpcRow[]).length === 0) {
-    return { ok: false, error: "Geen actieve schilders met opt-in om uit te nodigen." };
-  }
   revalidatePath("/admin/rondes");
   revalidatePath("/admin");
-  return { ok: true, links: buildLinks(data as RpcRow[]) };
+  return { ok: true, count: (data as number) ?? 0 };
 }
 
+// Automated dispatch (the outbox sweep) — same code the cron runs; usable
+// on-demand for the pilot. In SEND_MODE=sandbox this is a dry-run.
+export async function dispatchNow(): Promise<{
+  ok: boolean;
+  summary?: string;
+  error?: string;
+}> {
+  try {
+    const r = await runTick();
+    const s = `verstuurd ${r.invites.sent}, herinneringen ${r.reminders.sent}, geblokkeerd ${r.invites.blocked + r.reminders.blocked}, mislukt ${r.invites.failed + r.reminders.failed} (modus: ${r.invites.mode})`;
+    revalidatePath("/admin/rondes");
+    return { ok: true, summary: s };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "onbekende fout" };
+  }
+}
+
+// Manual fallback: mint fresh links for not-yet-responded invites (wa.me).
 export async function regenerateLinks(
   roundId: string,
 ): Promise<{ ok: boolean; links?: SendLink[]; error?: string }> {
@@ -54,7 +54,19 @@ export async function regenerateLinks(
     p_round_id: roundId,
   });
   if (error) return { ok: false, error: error.message };
-  return { ok: true, links: buildLinks((data ?? []) as RpcRow[]) };
+  const base = process.env.PUBLIC_BASE_URL || "http://localhost:3100";
+  const links = ((data ?? []) as RegenRow[]).map((r) => {
+    const first = r.full_name.split(" ")[0];
+    const url = `${base}/r/${r.raw_token}`;
+    const msg = `Hoi ${first}, Ruben (Krofs) komt binnenkort langs. Geef even door waar je werkt en op welke dagen: ${url}`;
+    return {
+      name: r.full_name,
+      phone: r.wa_phone_e164,
+      url,
+      waLink: `https://wa.me/${r.wa_phone_e164.replace(/^\+/, "")}?text=${encodeURIComponent(msg)}`,
+    };
+  });
+  return { ok: true, links };
 }
 
 export async function closeRonde(

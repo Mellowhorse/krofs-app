@@ -19,7 +19,7 @@
 --
 -- REVIEW BEFORE APPLY. Fresh-DB assumption (like db/002). Idempotent where
 -- cheap. Requires db/001 + db/002 applied first.
--- The route_stops ADDRESS-CLUSTERING refactor remains deferred — now db/007.
+-- The route_stops ADDRESS-CLUSTERING refactor remains deferred — now db/008.
 -- ============================================================================
 
 -- Enum additions must not be used in the same transaction they are added in,
@@ -174,7 +174,7 @@ commit;
 --   UTILITY template, or e-mail if template count should stay at two —
 --   decide at Meta template submission. No schema needed beyond the enum.
 --
--- DEFERRED —> db/007 (unchanged scope, renumbered from 003):
+-- DEFERRED —> db/008 (unchanged scope, renumbered from 003):
 --   route_stops address-level clustering refactor: one 30-min stop per
 --   ADDRESS with painters as a child; capacity/oversubscription counts
 --   ADDRESSES, not painters. Affects Phase 4 route building only.

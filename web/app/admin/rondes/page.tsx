@@ -24,6 +24,11 @@ export default async function RondesPage() {
       .select("*", { count: "exact", head: true })
       .eq("round_id", round.id)
       .eq("status", "responded");
+    const { count: pendingCount } = await supabase
+      .from("round_invites")
+      .select("*", { count: "exact", head: true })
+      .eq("round_id", round.id)
+      .eq("status", "pending");
     active = {
       id: round.id,
       label: round.label,
@@ -31,6 +36,7 @@ export default async function RondesPage() {
       visit_week_start: round.visit_week_start,
       visit_week_end: round.visit_week_end,
       invitesTotal: invitesTotal ?? 0,
+      pendingCount: pendingCount ?? 0,
       respondedCount: respondedCount ?? 0,
     };
   }
