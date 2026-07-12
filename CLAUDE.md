@@ -16,8 +16,11 @@ Stack: Supabase (Postgres + Auth + Edge Functions [Deno] + pg_cron + pg_net +
 Vault) + Next.js on Vercel. WhatsApp via Meta Cloud API direct (Twilio sandbox
 for dev).
 
-Status: **pre-build**. Schema + backend design authored (see `docs/`). Next code
-step: the reconciliation migration (`db/002`) — see "Known drift".
+Status: **Phases 1–4 built + live** on Vercel (SEND_MODE=sandbox). DB migrations
+001–009 applied to dev `wxhsyifejwlbothenjve`. Painter form, CSV import, round
+dispatch (Meta outbox + cron), geocoding, and route building all verified
+end-to-end on synthetic data. Pending on Chris: Meta Business verification +
+UTILITY templates (real sends), GOOGLE_MAPS_API_KEY (live geocode + drive-times).
 
 ## Golden rules (guardrails — do not violate)
 1. **No real sends in dev.** Every WhatsApp/SMS send MUST pass through
@@ -171,9 +174,21 @@ Fix-queue UI `/admin/adressen`: correct address → re-queue, or "toch gebruiken
 (manual_override, routes as-is). APPLIED + verified: sweep ok+not_found, fix-loop
 (correct→re-queue→ok), stub provider. Needs GOOGLE_MAPS_API_KEY for live geocoding.
 
-**Deferred to `db/009`** (Phase 4 only): the `route_stops` address-level clustering
-refactor — one 30-min stop per ADDRESS with painters as a child, capacity counts
-addresses. `route_stops` stays 1:1 response↔painter until then.
+`db/009_route_clustering.sql` — Phase 4: the address-level clustering refactor.
+`route_stops` is now one 30-min GROUP stop per ADDRESS; painters are children
+(`route_stop_painters`, unique per plan = each painter visited once). Build
+lifecycle RPCs (service_role): `start_route_build` (round closed→routing + fresh
+building plan), `finalize_route_build` (plan→ready+current, round→routed),
+`fail_route_build`. App: `web/lib/route.ts` — cluster by place_id/coords, pick the
+max-coverage visit date per address, nearest-neighbour order from IKEA Vathorst,
+wall-clock packing (ochtend before middag, DST-safe), Google Routes API when
+GOOGLE_MAPS_API_KEY else a haversine stub, per-day Google Maps deep-link. UI
+`/admin/route`: build/rebuild + per-day stops + "gezien" tap (`route_stops.visited_at`).
+APPLIED to dev + verified end-to-end (6 painters/5 addresses/3 days): clustering
+(2 painters at one address = 1 stop), NN order, chained local times, gezien persist,
+rebuild demotes the prior current plan (exactly 1 current). NOTE: a rebuild is a
+fresh plan, so it resets "gezien" marks. Needs GOOGLE_MAPS_API_KEY for real
+drive-times/distances (stub otherwise).
 
 **CI is the enforcement layer**: `.github/workflows/ci.yml` applies
 `db/tests/ci_stubs.sql` → 001 → 002 → 003 → `db/seed_dev.sql` on a fresh

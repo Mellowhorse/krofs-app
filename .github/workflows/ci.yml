@@ -58,6 +58,9 @@ jobs:
       - name: Apply db/008 (geocoding)
         run: psql -v ON_ERROR_STOP=1 -f db/008_geocode.sql
 
+      - name: Apply db/009 (route clustering)
+        run: psql -v ON_ERROR_STOP=1 -f db/009_route_clustering.sql
+
       - name: Seed (synthetic dev data must load cleanly)
         run: psql -v ON_ERROR_STOP=1 -f db/seed_dev.sql
 

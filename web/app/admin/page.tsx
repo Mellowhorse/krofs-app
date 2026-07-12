@@ -42,6 +42,10 @@ export default async function AdminHome() {
           </div>
           <div className="tile-sub">Niet-gevonden adressen corrigeren</div>
         </Link>
+        <Link className="tile" href="/admin/route">
+          <div className="tile-title">Route</div>
+          <div className="tile-sub">Route bouwen en afvinken wie je gezien hebt</div>
+        </Link>
       </div>
     </div>
   );

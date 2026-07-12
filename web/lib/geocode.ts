@@ -18,16 +18,28 @@ export function hasGoogleKey(): boolean {
 
 const r6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
-export function distanceKm(lat: number, lng: number): number {
-  const R = 6371;
-  const dLat = ((lat - IKEA_LAT) * Math.PI) / 180;
-  const dLng = ((lng - IKEA_LNG) * Math.PI) / 180;
-  const a =
+// Haversine great-circle distance between two points, in metres.
+export function haversineMeters(
+  aLat: number,
+  aLng: number,
+  bLat: number,
+  bLng: number,
+): number {
+  const R = 6371000;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const s =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((IKEA_LAT * Math.PI) / 180) *
-      Math.cos((lat * Math.PI) / 180) *
+    Math.cos((aLat * Math.PI) / 180) *
+      Math.cos((bLat * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+// Distance from the fixed start point (IKEA Vathorst), in km. Used for the
+// far-from-start review flag during geocoding.
+export function distanceKm(lat: number, lng: number): number {
+  return haversineMeters(IKEA_LAT, IKEA_LNG, lat, lng) / 1000;
 }
 
 type Addr = { straat: string; huisnummer: string; postcode: string | null; plaats: string };
