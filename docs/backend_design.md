@@ -5,7 +5,7 @@ _Adversarieel gereviewd (concurrency/atomiciteit · betrouwbaarheid integraties 
 
 ## Architectuur in het kort
 
-Runtime backend for the Krofs schilderbezoek-planner on Supabase (Postgres + Auth + Edge Functions/Deno + pg_cron + pg_net + Vault) with a Next.js/Vercel front. Three trust identities: (1) beheerder Ruben = Supabase Auth user gated by org-scoped RLS via is_admin_of(org_id); (2) schilder = NO auth identity, only an unguessable raw token whose sha256 hash lives in round_invites.token_hash (UNIQUE), reached exclusively through SECURITY DEFINER RPCs executed by a least-privilege painter_gateway DB role (NOT service_role); (3) machine callers = pg_cron/pg_net and BSP webhooks, authorized by a Vault-held service-role bearer or a verified provider signature over raw request bytes. The datamodel already exists; this design specifies the code that drives it and the invariants that keep it provably correct.
+Runtime backend for the Krofs schilderbezoek-planner on Supabase (Postgres + Auth + Edge Functions/Deno + pg_cron + pg_net + Vault) with a Next.js/Vercel front. Three trust identities: (1) beheerder Kees = Supabase Auth user gated by org-scoped RLS via is_admin_of(org_id); (2) schilder = NO auth identity, only an unguessable raw token whose sha256 hash lives in round_invites.token_hash (UNIQUE), reached exclusively through SECURITY DEFINER RPCs executed by a least-privilege painter_gateway DB role (NOT service_role); (3) machine callers = pg_cron/pg_net and BSP webhooks, authorized by a Vault-held service-role bearer or a verified provider signature over raw request bytes. The datamodel already exists; this design specifies the code that drives it and the invariants that keep it provably correct.
 
 Correctness rests on a small set of repeated primitives. (a) The DB is the single source of truth for time: reminder_at/deadline_at/visit_week_start/visit_week_end are trigger-computed from an immutable sent_at using Europe/Amsterdam local-day math ('AT TIME ZONE tz'), so DST cannot silently shift the deadline; deadline_at day-0 semantics are pinned (send day = day 0, comparison against next-midnight to avoid a 23:59:59 gap). (b) Every business-initiated WhatsApp send is a TRANSACTIONAL OUTBOX, not an inline ordered call: phase 1 CLAIM + INSERT message_log(status='queued', idempotency_key) commits; phase 2 (after commit, no DB lock held across the network) calls the BSP passing idempotency_key as the provider client-dedup/reference token, then UPDATEs status/provider_message_id. A dispatch sweeper re-drives rows stuck in 'queued'/'send_error' (safe because the provider dedupes on the reference), converting the path from at-most-once-with-lost-sends to at-least-once-with-provider-dedup — the real meaning of 'exactly-once-ish'. No round_invites row lock is ever held across a BSP HTTP call. (c) Painter token access is fail-closed (reject on NULL expiry, now()>=expiry, now()<valid_from, token used, opted_out) evaluated at load and again inside the write transaction, and cross-tenant/cross-token-safe because RPCs key strictly on the UNIQUE token_hash with SELECT ... INTO STRICT and return only that one invite's own fields. (d) Idempotent/resumable workers (start fan-out, close-round, build-routes) plus a heartbeat watchdog and time-based crons guarantee every round terminates at deadline regardless of response count; build-routes checkpoints per visit_date so large plans complete across ticks and never livelock. (e) Webhooks verify the provider signature over raw bytes, correlate on the echoed idempotency reference (not solely provider_message_id), advance message_log.status via a single atomic INSERT ... ON CONFLICT DO UPDATE with a rank guard in SQL, and model 'failed' as an orthogonal terminal that always wins over in-flight non-read states and triggers remediation. Secrets (service_role, Google keys, BSP creds, Next<->Edge shared secret) live only in Edge/server env + Vault; the browser holds only the anon key, inert under RLS.
 
@@ -31,7 +31,7 @@ Correctness rests on a small set of repeated primitives. (a) The DB is the singl
 ### Edge Functions
 
 #### `start-weekronde`
-- Trigger: HTTP POST from Next.js admin server route (shared secret) when Ruben clicks 'Start weekronde'
+- Trigger: HTTP POST from Next.js admin server route (shared secret) when Kees clicks 'Start weekronde'
 - Doet: FAST + TRANSACTIONAL ONLY: transition round draft->sending, stamp immutable sent_at (triggers compute reminder_at/deadline_at/visit_week_start/visit_week_end), and INSERT one round_invites row per eligible painter (status='pending', token_hash + token_expires_at=deadline_at + valid_from=now) in ONE transaction. Does NOT send any WhatsApp in-loop. Logs message_log(kind='other',status='failed',error_code='no_opt_in') per skipped painter. Returns eligible/skipped counts.
 - Contract: in:{round_id, org_id, actor_user_id}. Requires actor is admin_of(org_id) OR valid service-secret. Pre: round.status='draft'; one-active-round partial unique idx blocks a concurrent second start. out:{sent_at, deadline_at, reminder_at, visit_week_start, visit_week_end, eligible_count, skipped_count, invites_created}. Fail-closed on missing shared secret / non-admin.
 - Correctheid: Round transition + full invite fan-out row creation are ONE atomic fact, decoupled from dispatch so a crash cannot leave un-invited painters uninvitable (fix for partial-dispatch-on-crash). UPDATE weekrondes SET status='sending', sent_at=now() WHERE id=$r AND status='draft' RETURNING => zero rows aborts. Raw 32-byte token via gen_random_bytes; sha256 stored (token_hash UNIQUE); raw never persisted/logged. unique(round_id,painter_id) makes re-run a no-op. Actual sends are performed by the resumable dispatch-invite sweeper.
@@ -158,9 +158,9 @@ Correctness rests on a small set of repeated primitives. (a) The DB is the singl
 
 
 ### A. Start weekronde -> create invite rows (fan-out decoupled)
-_Actors: Ruben browser -> Next /api/admin/start -> start-weekronde Edge -> Postgres_
+_Actors: Kees browser -> Next /api/admin/start -> start-weekronde Edge -> Postgres_
 
-1. 1. Ruben clicks Start; Next admin route verifies his Supabase session + app_admins membership and POSTs {round_id, org_id} to start-weekronde with the shared secret.
+1. 1. Kees clicks Start; Next admin route verifies his Supabase session + app_admins membership and POSTs {round_id, org_id} to start-weekronde with the shared secret.
 2. 2. start-weekronde verifies the shared secret (fail-closed) and caller-org match.
 3. 3. In ONE transaction: UPDATE weekrondes SET status='sending', sent_at=now() WHERE id=$round AND status='draft' RETURNING (zero rows aborts). weekronde_anchors computes reminder_at, deadline_at (local next-midnight-minus-1s at day 5), visit_week_start, visit_week_end. One-active-round partial unique index blocks a concurrent second start.
 4. 4. Still in the same tx: select eligible painters (org, is_active, opted_in) and INSERT one round_invites row each {token_hash=sha256(raw), token_expires_at=deadline_at, valid_from=now, status='pending'} (unique(round_id,painter_id) => re-run no-op); INSERT message_log(kind='other',status='failed',error_code='no_opt_in') per skipped painter. Commit.
@@ -285,12 +285,12 @@ _Actors: Painter (after deadline) -> Next /r/{token} -> gateway -> submit_respon
 1. 1. token_expires_at = deadline_at governs the fail-closed READ path (GET returns opaque 410 after deadline).
 2. 2. submit_response uses a SEPARATE grace_until = deadline_at + grace_interval: if now()<deadline_at -> on-time; if deadline_at<=now()<grace_until -> accept but set is_late=true and DO NOT flip round status; if now()>=grace_until -> abort. This resolves the token_expires_at==deadline_at contradiction (grace is an explicit, bounded window, not a silent bypass).
 3. 3. build-routes filters strictly on is_late=false, so a produced route reflects only on-time in-window responses.
-4. 4. When Ruben starts the NEXT weekronde, a fresh invite is created and linked via round_invites.carry_over_from_invite_id to the expired predecessor, re-inviting the late painter.
+4. 4. When Kees starts the NEXT weekronde, a fresh invite is created and linked via round_invites.carry_over_from_invite_id to the expired predecessor, re-inviting the late painter.
 5. 5. Consent and address history preserved; the late response never mutates the closed/routed round.
 
 **Garanties:**
 - Closed rounds are immutable: late writes cannot reopen or mutate a routed round.
-- Grace window is explicit and bounded (grace_interval agreed with Ruben), not an undefined bypass of the fail-closed check.
+- Grace window is explicit and bounded (grace_interval agreed with Kees), not an undefined bypass of the fail-closed check.
 - No data loss: is_late + carry_over_from_invite_id roll the late painter into the next round.
 - Deterministic routing: only on-time, in-window responses become stops.
 
@@ -352,7 +352,7 @@ _Actors: Painter (after deadline) -> Next /r/{token} -> gateway -> submit_respon
 - Geocode failure queue: idx_invite_responses_unroutable powers the admin fix queue (ambiguous/not_found/error_exhausted with no override); track geocode_attempts distribution and error_exhausted rate to spot quota exhaustion.
 - Build health: alert if a plan sits 'building' past HEARTBEAT_TTL repeatedly, if build_attempts approaches the fail cap, or if any plan is 'failed'; expose last_completed_visit_date progress and optimization_status='fallback' day counts.
 - Delivery funnel: per round, counts by message status queued/sent/delivered/read/failed and by invite_status; response rate = responded / opted_in.
-- Route feasibility flags: surface route_days.is_oversubscribed, optimization_status='fallback', and route_plans.unrouted_count prominently so Ruben makes the manual call.
+- Route feasibility flags: surface route_days.is_oversubscribed, optimization_status='fallback', and route_plans.unrouted_count prominently so Kees makes the manual call.
 - Webhook health: signature-verification failure rate, out-of-order/regressed callbacks ignored, and inbound opt-out processing lag; alert on spikes (spoofing or provider/proxy change).
 - Consent audit view: painter_consent_events timeline per painter for GDPR/WhatsApp reconstruction, intact after PII purges.
 - Token-safety CI check: automated grep asserting no raw token / /r/{token} URL appears in message_log.payload or logs; plus a lint forbidding .from(<table>) in the painter gateway module.
@@ -410,13 +410,13 @@ _Actors: Painter (after deadline) -> Next /r/{token} -> gateway -> submit_respon
 
 ## Open vragen
 
-- reminder_at semantics: confirm with Ruben whether '24h reminder' means 24h elapsed (sent_at + interval '24 hours') or next-day same-wall-time (DST-safe double AT TIME ZONE). Encode and test the chosen one.
+- reminder_at semantics: confirm with Kees whether '24h reminder' means 24h elapsed (sent_at + interval '24 hours') or next-day same-wall-time (DST-safe double AT TIME ZONE). Encode and test the chosen one.
 - deadline day-0 convention: confirm the send day counts as day 0 (current assumption) so '5 local days after send' = local next-midnight-minus-1s at day 5; add boundary tests for 00:01 and 23:59 local sends.
 - grace_interval for late reactions: pick the concrete value for grace_until = deadline_at + grace_interval (or set it to zero = hard expire at deadline). Drives submit_response's is_late window.
 - visit_week_end rule: confirm the window length (Mon-Fri = visit_week_start+4, or +6) and how a chosen weekday mapping to multiple dates in the window is resolved (earliest match vs offer all).
 - BSP choice (Twilio vs 360dialog vs Meta Cloud): locks the exact signature scheme, the client-ref/echo field used for correlation, and template-approval details; the two webhook functions branch on provider until then.
 - Opt-in bootstrap channel: onboarding form/portal vs first permitted utility template whose reply flips pending->opted_in. Hard go-live gate.
 - HEARTBEAT_TTL and per-run day-cap (N) for build-routes, and geocode backoff/cap constants: tune empirically against measured Edge wall-clock and Google latency (proposed HEARTBEAT_TTL 2-3 min, 5 geocode attempts).
-- Oversubscription remains advisory (no auto-balancing/aging) and fallback-ordered days are flagged not auto-fixed: confirm Ruben accepts making the manual call for the MVP.
+- Oversubscription remains advisory (no auto-balancing/aging) and fallback-ordered days are flagged not auto-fixed: confirm Kees accepts making the manual call for the MVP.
 - GDPR lawful basis and retention_months: confirm and document the processing record (client-site addresses are sensitive) before finalizing purge-pii settings; confirm which identifiers must be retained for consent/correlation.
 - Dispatch-sweeper max-attempts before dead-letter, and the admin remediation UX for 'undispatchable'/'undelivered' painters: define before go-live.

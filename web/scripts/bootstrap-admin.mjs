@@ -1,4 +1,4 @@
-// Bootstrap the beheerder (Ruben): create the auth user + seed app_admins.
+// Bootstrap the beheerder (Kees): create the auth user + seed app_admins.
 // Run:  node --env-file=.env.local scripts/bootstrap-admin.mjs
 // Optional env: ADMIN_EMAIL, ADMIN_PASSWORD, ORG_NAME
 import { createClient } from "@supabase/supabase-js";
@@ -56,7 +56,7 @@ async function main() {
   const { error: aaErr } = await admin
     .from("app_admins")
     .upsert(
-      { user_id: userId, org_id: orgId, display_name: "Ruben" },
+      { user_id: userId, org_id: orgId, display_name: "Kees" },
       { onConflict: "user_id" },
     );
   if (aaErr) throw aaErr;

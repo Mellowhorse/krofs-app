@@ -5,8 +5,8 @@ If an instruction contradicts something here, **stop and surface it** rather tha
 proceeding.
 
 ## What this is
-A tool for Krofs' relatiebeheerder (Ruben) to plan physical visits to ~50
-gedetacheerde schilders at changing client work-locations. Ruben starts a weekly
+A tool for Krofs' relatiebeheerder (Kees) to plan physical visits to ~50
+gedetacheerde schilders at changing client work-locations. Kees starts a weekly
 round; the app WhatsApps each painter a no-login link; the painter submits their
 work address + which days they're there; after a hard deadline the app clusters
 per address and builds a per-day driving route from a fixed start
@@ -53,7 +53,7 @@ werkdagen -> reminder = **next day, same wall-time** (DST-safe) -> deadline =
 (no grace) -> geocode + cluster **per address**, 30 min per address (group visit;
 multiple painters at one address = one 30-min stop) -> per-day route from fixed
 IKEA Vathorst (52.2478, 5.4147), ochtend+middag chained, each day restarts from
-IKEA -> Ruben drives ("open in Google Maps"). Late responders roll into the next
+IKEA -> Kees drives ("open in Google Maps"). Late responders roll into the next
 round.
 
 Visit window: **one work week (ma–vr)** directly after close; the form offers
@@ -79,7 +79,7 @@ per-IP rate limiting via a shared store (Upstash / Vercel KV).
    happen 8–13 days after fill-in while locations change weekly; this was the
    v1-identified top failure mode, reinstated.
 2. **Visit tracking** — `route_stops.visited_at` ("gezien" tap) +
-   `painter_last_visited` view = Ruben's original "bijhouden wie je gezien
+   `painter_last_visited` view = Kees's original "bijhouden wie je gezien
    hebt" ask. Enables a later longest-unseen-first priority rule for free.
 3. **Prefill** — the form opens with "Werk je nog steeds op <laatste adres>?"
    [Ja] [Nee, ander adres] via the `painter_last_address` view. One tap for
@@ -87,10 +87,10 @@ per-IP rate limiting via a shared store (Upstash / Vercel KV).
    fresh-per-round guarantee. (Supersedes the earlier "no prefill" default.)
 4. **Inbound fallback** — painters who reply in WhatsApp instead of using the
    link: inbound rows land in an unhandled queue (`message_log.handled_at`
-   null) on the dashboard so Ruben can enter the answer manually.
+   null) on the dashboard so Kees can enter the answer manually.
 5. **`deadline_days` org setting** (default 5 = locked value) — the pilot can
    shorten the collection window without a migration.
-6. **Route-ready notification** to Ruben (`message_kind='route_ready'`) via the
+6. **Route-ready notification** to Kees (`message_kind='route_ready'`) via the
    outbox when a plan reaches `ready`; channel = third UTILITY template or
    e-mail, decide at template submission.
 

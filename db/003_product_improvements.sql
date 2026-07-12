@@ -6,16 +6,16 @@
 --       (copy-level, no schema) + a day-before LOCATION-CONFIRM ping
 --       (new message_kind 'location_confirm' + tracking columns).
 --   P2  Visit tracking: route_stops.visited_at ("gezien" tap) + a
---       painter_last_visited view — Ruben's original "bijhouden wie je
+--       painter_last_visited view — Kees's original "bijhouden wie je
 --       gezien hebt" ask from the interview.
 --   P3  Prefill: one-tap "werk je nog steeds op X?" — no schema change
 --       needed, but a painter_last_address view makes the lookup trivial.
 --   P4  Inbound fallback: painters who REPLY in WhatsApp instead of using
 --       the link — message_log.handled_at + an unhandled-inbound index so
---       the dashboard can surface them to Ruben.
+--       the dashboard can surface them to Kees.
 --   P5  deadline_days as an org setting (default 5) instead of hardcoded —
 --       the pilot can shorten the window without a migration.
---   P6  route-ready notification to Ruben (message_kind 'route_ready').
+--   P6  route-ready notification to Kees (message_kind 'route_ready').
 --
 -- REVIEW BEFORE APPLY. Fresh-DB assumption (like db/002). Idempotent where
 -- cheap. Requires db/001 + db/002 applied first.
@@ -85,7 +85,7 @@ $$;
 
 -- ============================================================================
 -- P2 — visit tracking ("gezien" tap on the dashboard)
---   One tap per stop sets visited_at. painter_last_visited gives Ruben the
+--   One tap per stop sets visited_at. painter_last_visited gives Kees the
 --   "laatst gezien" column per painter and later enables a priority rule
 --   ("wie het langst niet gezien is eerst") with zero schema change.
 -- ============================================================================
@@ -93,7 +93,7 @@ alter table route_stops
   add column if not exists visited_at timestamptz;
 
 comment on column route_stops.visited_at is
-  'Set when Ruben taps "gezien" on the dashboard. Null = planned but not (yet) visited.';
+  'Set when Kees taps "gezien" on the dashboard. Null = planned but not (yet) visited.';
 
 create index if not exists idx_route_stops_painter_visited
   on route_stops(painter_id, visited_at desc)
@@ -136,7 +136,7 @@ comment on view painter_last_address is
 --   (locations change weekly; the visit is 8–13 days after fill-in).
 --   The sweep sends a 'location_confirm' template the day before the visit;
 --   "ja" sets location_confirmed_at; "nee" (or any free-text reply) lands in
---   the unhandled-inbound queue (P4) for Ruben.
+--   the unhandled-inbound queue (P4) for Kees.
 -- ============================================================================
 alter table invite_responses
   add column if not exists location_confirm_sent_at timestamptz;
@@ -146,19 +146,19 @@ alter table invite_responses
 comment on column invite_responses.location_confirm_sent_at is
   'Day-before "klopt je locatie nog?" ping sent at (sweep-driven, outbox path).';
 comment on column invite_responses.location_confirmed_at is
-  'Painter confirmed the location for the visit. Null + a nee/free-text reply => Ruben checks the inbound queue.';
+  'Painter confirmed the location for the visit. Null + a nee/free-text reply => Kees checks the inbound queue.';
 
 -- ============================================================================
 -- P4 — inbound fallback queue
 --   Painters who reply in WhatsApp instead of tapping the link. The inbound
---   webhook already logs these rows; handled_at lets Ruben dismiss them once
+--   webhook already logs these rows; handled_at lets Kees dismiss them once
 --   processed. Partial index = the dashboard queue.
 -- ============================================================================
 alter table message_log
   add column if not exists handled_at timestamptz;
 
 comment on column message_log.handled_at is
-  'Set when Ruben has processed an inbound message (e.g. manually entered a painter''s address).';
+  'Set when Kees has processed an inbound message (e.g. manually entered a painter''s address).';
 
 create index if not exists idx_message_log_inbound_unhandled
   on message_log(org_id, created_at)
@@ -169,7 +169,7 @@ commit;
 -- ============================================================================
 -- P6 — route-ready notification (documentation)
 --   The build-routes sweep, on plan status='ready', queues ONE outbound
---   message_log row kind='route_ready' to Ruben via the same transactional
+--   message_log row kind='route_ready' to Kees via the same transactional
 --   outbox (idempotency_key = 'route_ready:{plan_id}'). Channel = a third
 --   UTILITY template, or e-mail if template count should stay at two —
 --   decide at Meta template submission. No schema needed beyond the enum.

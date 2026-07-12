@@ -34,7 +34,7 @@ function reasonNL(reason?: string): string {
     case "no_expiry":
     case "not_yet_valid":
     case "opted_out":
-      return "Deze link is niet meer geldig. Neem contact op met Ruben.";
+      return "Deze link is niet meer geldig. Neem contact op met Kees.";
     default:
       return "Er ging iets mis. Probeer het zo nog eens.";
   }
@@ -126,7 +126,7 @@ export default function PainterForm({
             </div>
             <h2>Bedankt{firstName ? `, ${firstName}` : ""}!</h2>
             <p>
-              We hebben je gegevens ontvangen. Ruben plant zijn route en je hoort
+              We hebben je gegevens ontvangen. Kees plant zijn route en je hoort
               wanneer hij langskomt.
             </p>
             {done === "ok" ? (
@@ -165,7 +165,7 @@ export default function PainterForm({
 
           <h1>Hoi{firstName ? ` ${firstName}` : ""},</h1>
           <p className="intro">
-            Ruben komt binnenkort langs voor een kop koffie. Laat weten waar je
+            Kees komt binnenkort langs voor een kop koffie. Laat weten waar je
             werkt in de week van {weekLabel} en op welke dagen.
           </p>
 

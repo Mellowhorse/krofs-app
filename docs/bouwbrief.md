@@ -21,13 +21,13 @@ Tenant boundary. MVP seeds exactly one row (Krofs). Present so painters/rounds/r
 | `created_at` | timestamptz |  | default now() |
 
 ### `app_admins`
-Whitelist of Supabase Auth users allowed to act as beheerder (Ruben). Referenced by org-scoped RLS so only approved auth users get access to their own org's rows.
+Whitelist of Supabase Auth users allowed to act as beheerder (Kees). Referenced by org-scoped RLS so only approved auth users get access to their own org's rows.
 
 | kolom | type | key | note |
 |---|---|---|---|
 | `user_id` | uuid | PK | = auth.users.id; ON DELETE CASCADE |
 | `org_id` | uuid | FK | -> organizations.id; RLS compares this to each row's org_id |
-| `display_name` | text |  | e.g. 'Ruben' |
+| `display_name` | text |  | e.g. 'Kees' |
 | `created_at` | timestamptz |  | default now() |
 
 ### `painters`
@@ -161,7 +161,7 @@ One current route plan per round (regenerable). A trigger demotes prior plans to
 | `generated_at` | timestamptz |  | when build finished |
 | `provider` | text |  | 'google_routes' |
 | `is_current` | boolean |  | default true; trigger-demotes others; partial unique index |
-| `unrouted_count` | integer |  | responders excluded (geocode not ok & no override); surfaced to Ruben |
+| `unrouted_count` | integer |  | responders excluded (geocode not ok & no override); surfaced to Kees |
 | `error` | text |  | last build error |
 | `created_at` | timestamptz |  | default now() |
 
@@ -240,7 +240,7 @@ WhatsApp send + inbound log. idempotency_key is mandatory for outbound invite/re
 
 ## RLS & toegang
 
-- Two access identities only. (1) Beheerder 'Ruben' = a Supabase Auth user whose (auth.uid(), org_id) exists in app_admins; (2) Schilder = NO auth identity at all, only an unguessable token whose HASH is stored.
+- Two access identities only. (1) Beheerder 'Kees' = a Supabase Auth user whose (auth.uid(), org_id) exists in app_admins; (2) Schilder = NO auth identity at all, only an unguessable token whose HASH is stored.
 - Admin RLS is ORG-SCOPED, not global. Every policy uses is_admin_of(<row.org_id>) (SECURITY DEFINER helper comparing app_admins.org_id to the row's org_id). Child tables without org_id (response_workdays/route_days/route_stops) gate via a parent join. This makes the multi-tenant claim true today: a second org cannot read the first org's PII. anon has zero policies, so the public/anon key reads nothing.
 - Painter token security: only sha256(token) is stored in round_invites.token_hash; the raw token exists transiently at send time (in the WhatsApp body) and is NEVER persisted in the DB. message_log.payload is redacted and must never contain the token or the /r/{token} URL. The token is single-use (token_used_at) and fail-closed on expiry: the Edge Function rejects when token_expires_at IS NULL, when now() >= token_expires_at, when now() < valid_from, or when token_used_at is already set.
 - Painter access path with defense-in-depth: /r/{token} is served by a Next.js server route that calls a Supabase Edge Function (service_role). Because service_role bypasses RLS, painter reads/writes go through SECURITY DEFINER RPCs that look up by token_hash and return ONLY that invite's own fields (never SELECT *, never filter by round_id). A regression test must assert one token cannot retrieve another invite's data.
@@ -267,7 +267,7 @@ WhatsApp send + inbound log. idempotency_key is mandatory for outbound invite/re
   - Called from Edge Function on response submit and re-run in build-routes for 'pending'. Distinguish TRANSIENT (429/OVER_QUERY_LIMIT -> status='error', retry with backoff via geocode_attempts) from TERMINAL (not_found/ambiguous -> needs human). Persist place_id, location_type (confidence), geocoded_at. region=nl bias. ambiguous/not_found/error rows are excluded from auto-routing and surfaced to the beheerder (idx_invite_responses_unroutable); admin can manual_override with corrected lat/lng. Cost at ~50/round is negligible (well within free tier) — no caching needed for MVP.
 - **Google Maps Routes API (Directions)** — Waypoint-optimized per-day round-trip from/return to IKEA Vathorst; ordered stops + drive legs + totals.
   - One computeRoutes request per visit_date: origin=destination=IKEA Vathorst, intermediates=that day's lat/lng points (NOT place_id — passing lat/lng keeps the limit at 98 waypoints; place_id drops it to 25), optimizeWaypointOrder=true, travelMode=DRIVE. The <1000km cumulative straight-line rule only bites above 25 stops (irrelevant for a compact NL day, but keep a defensive guard). Map optimized order into route_stops.seq; ochtend+middag are one continuous chain per day; each new day restarts from IKEA. Build a per-day Google Maps deep link.
-- **Supabase Auth** — Authenticate the single beheerder (Ruben).
+- **Supabase Auth** — Authenticate the single beheerder (Kees).
   - Email magic-link or password; (auth.uid(), org_id) must exist in app_admins for org-scoped admin RLS. Painters never authenticate.
 - **Vercel (Next.js)** — Host the admin dashboard and the tokenized painter form page /r/{token}; also the public BSP webhooks (or host webhooks as Supabase Edge Functions).
   - Painter page is server-rendered and talks only to the Edge Function using a server-held shared secret (Vercel env). No service_role/Google/BSP key ever reaches the browser bundle (only NEXT_PUBLIC anon key, which has no table access). Enumerate the full public surface: /r/{token}, delivery-status webhook, inbound-message webhook — each with its auth (shared secret or provider signature).
@@ -278,7 +278,7 @@ WhatsApp send + inbound log. idempotency_key is mandatory for outbound invite/re
 ### 0 - Foundations
 - Create Supabase project + apply migration_sql
 - Enable extensions: pgcrypto, btree_gist, pg_cron, pg_net
-- Seed one organization (Krofs) with timezone/day-window defaults + insert Ruben into app_admins
+- Seed one organization (Krofs) with timezone/day-window defaults + insert Kees into app_admins
 - Set env/secrets in Supabase Vault + Vercel: SERVICE_ROLE, Google Maps key, BSP creds, Next<->EdgeFunction shared secret
 - Scaffold Next.js on Vercel with Supabase Auth for admin
 
@@ -314,8 +314,8 @@ WhatsApp send + inbound log. idempotency_key is mandatory for outbound invite/re
 
 ## Open risico's
 
-- Weekday->concrete-date expansion: work_date must be >= weekrondes.visit_week_start (day after the local deadline) and its ISO weekday must equal the stored weekday (both now enforced by CHECK + trigger). Confirm with Ruben the exact visit-week definition and the rule when a chosen weekday could map to more than one date in the window.
-- Daily capacity is computed but not hard-capped: route_days.is_oversubscribed flags days where drive+visits exceed org.max_working_minutes, surfaced to Ruben. There is deliberately no auto-balancing (anti-starvation/aging remains out of scope/future); a single oversubscribed day still needs a manual decision.
+- Weekday->concrete-date expansion: work_date must be >= weekrondes.visit_week_start (day after the local deadline) and its ISO weekday must equal the stored weekday (both now enforced by CHECK + trigger). Confirm with Kees the exact visit-week definition and the rule when a chosen weekday could map to more than one date in the window.
+- Daily capacity is computed but not hard-capped: route_days.is_oversubscribed flags days where drive+visits exceed org.max_working_minutes, surfaced to Kees. There is deliberately no auto-balancing (anti-starvation/aging remains out of scope/future); a single oversubscribed day still needs a manual decision.
 - Opt-in bootstrap is a hard external dependency: without a compliant opt-in captured OUTSIDE WhatsApp (or via a permitted first template), dag-0 template sends are blocked by the BSP and the round collects nothing while still closing at deadline. The eligible-vs-skipped surfacing mitigates silent failure but the bootstrap itself must exist before go-live.
 - Token in URL remains the sole painter credential even with hashing/expiry/single-use: enforce HTTPS-only and no token logging anywhere (message_log.payload is redacted by design; add a test asserting the token substring never appears). A forwarded link before first submit is still a one-time capability until token_used_at is set.
 - Edge Function over-fetch is the main no-login risk: service_role bypasses RLS, so the SECURITY DEFINER painter RPCs must filter strictly by the token's own invite_id (never round_id) and never SELECT *. A regression test asserting cross-invite isolation is required.

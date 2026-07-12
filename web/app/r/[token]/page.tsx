@@ -16,7 +16,7 @@ function ClosedPage() {
           <h2>Bedankt!</h2>
           <p>
             Je gegevens zijn al ontvangen, of deze link is niet meer geldig. Neem
-            contact op met Ruben als dit niet klopt.
+            contact op met Kees als dit niet klopt.
           </p>
         </div>
       </div>

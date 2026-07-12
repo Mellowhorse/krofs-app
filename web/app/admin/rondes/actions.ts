@@ -58,7 +58,7 @@ export async function regenerateLinks(
   const links = ((data ?? []) as RegenRow[]).map((r) => {
     const first = r.full_name.split(" ")[0];
     const url = `${base}/r/${r.raw_token}`;
-    const msg = `Hoi ${first}, Ruben (Krofs) komt binnenkort langs. Geef even door waar je werkt en op welke dagen: ${url}`;
+    const msg = `Hoi ${first}, Kees (Krofs) komt binnenkort langs. Geef even door waar je werkt en op welke dagen: ${url}`;
     return {
       name: r.full_name,
       phone: r.wa_phone_e164,

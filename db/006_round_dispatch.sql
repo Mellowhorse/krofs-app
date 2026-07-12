@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Krofs schilderbezoek-planner — db/006 ROUND DISPATCH (Phase 2)
 -- ----------------------------------------------------------------------------
--- start_weekronde: the admin (Ruben) opens a weekronde and mints one invite
+-- start_weekronde: the admin (Kees) opens a weekronde and mints one invite
 -- per eligible painter. SECURITY DEFINER, callable by an authenticated admin
 -- (derives org from app_admins via auth.uid(); rejects non-admins). Returns
 -- the RAW tokens ONCE so the caller can build per-painter links; only the
