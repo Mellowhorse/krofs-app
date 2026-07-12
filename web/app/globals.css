@@ -180,3 +180,8 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .btn-sm { font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 0.5px solid var(--border-strong); background: #fff; color: var(--text); cursor: pointer; text-decoration: none; font-family: inherit; white-space: nowrap; }
 .btn-sm:hover { background: var(--bg); }
 .btn-wa { background: #25D366; color: #073d1c; border-color: #1eb257; font-weight: 500; }
+
+/* ---------- adressen fix-queue ---------- */
+.fixrow { background: #fff; border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+.fixrow-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.badge { display: inline-block; margin-left: 8px; background: #fcebeb; color: #a32d2d; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; vertical-align: middle; }

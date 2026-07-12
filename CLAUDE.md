@@ -162,7 +162,16 @@ without secret, reminder due→sent→stamped, day-5 close closes + expires.
 NOTE: the anchor trigger makes deadline_at un-editable by design (recomputed from
 sent_at) — test closes with a backdated `sent_at` INSERT, not an UPDATE.
 
-**Deferred to `db/008`** (Phase 4 only): the `route_stops` address-level clustering
+`db/008_geocode.sql` — Phase 3: `claim_geocode_batch` (service_role atomic lease,
+skip-locked, attempts<5) for the geocode sweep. App: `web/lib/geocode.ts` (Google
+Geocoding API; STUB near Amersfoort when no GOOGLE_MAPS_API_KEY, so testable),
+`geocodeResponses()` in sweeps (now part of /tick): ok / not_found / ambiguous /
+error(transient-retry), far-than-GEOCODE_REVIEW_KM(75) flagged as ambiguous.
+Fix-queue UI `/admin/adressen`: correct address → re-queue, or "toch gebruiken"
+(manual_override, routes as-is). APPLIED + verified: sweep ok+not_found, fix-loop
+(correct→re-queue→ok), stub provider. Needs GOOGLE_MAPS_API_KEY for live geocoding.
+
+**Deferred to `db/009`** (Phase 4 only): the `route_stops` address-level clustering
 refactor — one 30-min stop per ADDRESS with painters as a child, capacity counts
 addresses. `route_stops` stays 1:1 response↔painter until then.
 
@@ -182,7 +191,7 @@ See `docs/backend_design.md` for the full runtime design and 45-scenario test ma
   `web/.env.local` (gitignored). Run: `npm --prefix web run dev` (port 3100).
 - `db/` — numbered SQL migrations (`001` base, `002` reconciliation, `003` product
   improvements, `004` security hardening, `005` painter RPCs, `006` round dispatch, `007` outbox,
-  `008` = deferred clustering refactor)
+  `008` geocoding, `009` = deferred clustering refactor)
 - `db/seed_dev.sql` — synthetic dev data (fake painters, never real numbers)
 - `db/tests/` — `ci_stubs.sql` (auth schema/roles for plain Postgres) +
   `smoke_test.sql` (executable invariants)
