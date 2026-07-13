@@ -11,7 +11,7 @@ if (!url || !key) {
 }
 const admin = createClient(url, key, { auth: { persistSession: false } });
 
-const EMAIL = process.env.ADMIN_EMAIL || "ruben@krofs.test";
+const EMAIL = process.env.ADMIN_EMAIL || "kees@krofs.test";
 const PASSWORD = process.env.ADMIN_PASSWORD || "krofs-dev-1234";
 const ORG_NAME = process.env.ORG_NAME || "Krofs";
 
