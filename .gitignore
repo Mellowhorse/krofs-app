@@ -21,3 +21,6 @@ supabase/.branches/
 .DS_Store
 *.log
 npm-debug.log*
+
+# local CI reproduction (db/tests/run-local.mjs)
+db/tests/pgdata/

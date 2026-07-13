@@ -1,0 +1,12 @@
+{
+  "name": "krofs-db-ci-local",
+  "private": true,
+  "type": "module",
+  "description": "Reproduce the GitHub CI migration chain against a throwaway local Postgres (no Docker).",
+  "scripts": {
+    "test": "node run-local.mjs"
+  },
+  "devDependencies": {
+    "embedded-postgres": "18.4.0-beta.17"
+  }
+}
