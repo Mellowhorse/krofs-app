@@ -165,6 +165,26 @@ create policy admin_org on route_stop_painters for all to authenticated
   with check (exists (select 1 from route_plans p where p.id = route_plan_id and is_admin_of(p.org_id)));
 
 -- ---------------------------------------------------------------------------
+-- Recreate painter_last_visited. The db/003 view read route_stops.painter_id,
+-- but painter_id has moved to route_stop_painters — and `drop table route_stops
+-- cascade` above cascade-dropped the view. Rebuild it over the parent/child
+-- shape (visited_at on the stop, painter on the child).
+-- ---------------------------------------------------------------------------
+create index if not exists idx_route_stop_painters_painter on route_stop_painters(painter_id);
+create index if not exists idx_route_stops_visited on route_stops(visited_at desc) where visited_at is not null;
+
+create or replace view painter_last_visited
+with (security_invoker = true) as
+  select rsp.painter_id, max(rs.visited_at) as last_visited_at
+  from route_stops rs
+  join route_stop_painters rsp on rsp.stop_id = rs.id
+  where rs.visited_at is not null
+  group by rsp.painter_id;
+
+comment on view painter_last_visited is
+  '"Laatst gezien" per painter, derived from route_stops.visited_at via route_stop_painters.';
+
+-- ---------------------------------------------------------------------------
 -- 4. Build lifecycle (service_role only).
 --    start -> a fresh 'building' plan (is_current=false) + round 'routing'.
 --    finalize -> plan 'ready' + is_current=true (demotes prior) + round 'routed'.
