@@ -9,7 +9,7 @@ export default async function RondesPage() {
 
   const { data: round } = await supabase
     .from("weekrondes")
-    .select("id, label, status, deadline_at, visit_week_start, visit_week_end")
+    .select("id, label, status, deadline_at, visit_week_start, visit_week_end, public_slug")
     .in("status", ["sending", "collecting"])
     .maybeSingle();
 
@@ -29,6 +29,7 @@ export default async function RondesPage() {
       .select("*", { count: "exact", head: true })
       .eq("round_id", round.id)
       .eq("status", "pending");
+    const base = process.env.PUBLIC_BASE_URL || "http://localhost:3100";
     active = {
       id: round.id,
       label: round.label,
@@ -38,6 +39,7 @@ export default async function RondesPage() {
       invitesTotal: invitesTotal ?? 0,
       pendingCount: pendingCount ?? 0,
       respondedCount: respondedCount ?? 0,
+      shareUrl: round.public_slug ? `${base}/u/${round.public_slug}` : null,
     };
   }
 

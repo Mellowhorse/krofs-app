@@ -214,4 +214,53 @@ begin
   raise notice 'T7 ok — painter RPCs';
 end $$;
 
+-- T8 — Option 2 public intake (db/010): slug resolve, self-report create,
+-- dedup on re-submit, roster match by phone, opaque unknown slug.
+do $$
+declare
+  v_org uuid; v_rnd uuid; slug text; vws date; r jsonb; n int;
+begin
+  insert into organizations (name) values ('smoke-intake') returning id into v_org;
+  insert into weekrondes (org_id, label, status, sent_at)
+    values (v_org, 'intake', 'collecting', now()) returning id into v_rnd;
+  select visit_week_start, public_slug into vws, slug from weekrondes where id = v_rnd;
+
+  r := get_round_by_slug(slug);
+  if (r->>'ok') <> 'true' then raise exception 'T8 slug resolve: %', r; end if;
+
+  -- unknown phone => a self-report painter is created
+  r := submit_public_response(slug, 'Nieuwe Schilder', '+31611110001',
+        'Straat', '1', '1234 AB', 'Amersfoort', array[vws]::date[], false);
+  if (r->>'ok') <> 'true' or (r->>'matched') <> 'false' then raise exception 'T8 create: %', r; end if;
+  select count(*) into n from painters where org_id = v_org and wa_phone_e164 = '+31611110001';
+  if n <> 1 then raise exception 'T8 painter not created (n=%)', n; end if;
+
+  -- re-submit same phone => dedup (one painter, one invite), address updated
+  r := submit_public_response(slug, 'Nieuwe Schilder', '+31611110001',
+        'Andereweg', '9', null, 'Baarn', array[vws]::date[], false);
+  if (r->>'ok') <> 'true' then raise exception 'T8 resubmit: %', r; end if;
+  select count(*) into n from painters where org_id = v_org and wa_phone_e164 = '+31611110001';
+  if n <> 1 then raise exception 'T8 dedup painter (n=%)', n; end if;
+  select count(*) into n from round_invites where round_id = v_rnd;
+  if n <> 1 then raise exception 'T8 dedup invite (n=%)', n; end if;
+  if not exists (select 1 from invite_responses ir join round_invites ri on ri.id = ir.invite_id
+       where ri.round_id = v_rnd and ir.plaats = 'Baarn') then
+    raise exception 'T8 address not updated on resubmit';
+  end if;
+
+  -- known roster phone => matched, no new painter row
+  insert into painters (org_id, full_name, wa_phone_e164, wa_opt_in_status, is_active)
+    values (v_org, 'Bekend', '+31611110002', 'opted_in', true);
+  r := submit_public_response(slug, 'Bekend', '+31611110002',
+        'Kerk', '2', '1000 AA', 'Nijkerk', array[vws]::date[], false);
+  if (r->>'ok') <> 'true' or (r->>'matched') <> 'true' then raise exception 'T8 match: %', r; end if;
+  select count(*) into n from painters where org_id = v_org;
+  if n <> 2 then raise exception 'T8 match created a painter (n=%)', n; end if;
+
+  r := get_round_by_slug('does-not-exist');
+  if (r->>'ok') <> 'false' then raise exception 'T8 unknown slug not opaque: %', r; end if;
+
+  raise notice 'T8 ok — public intake';
+end $$;
+
 select 'ALL SMOKE TESTS PASSED' as result;

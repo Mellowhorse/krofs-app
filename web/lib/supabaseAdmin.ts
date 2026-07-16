@@ -74,3 +74,57 @@ export async function submitResponse(
   }
   return data as { ok: boolean; reason?: string };
 }
+
+// ---- Option 2: shared broadcast intake (self-identify by phone) ------------
+
+export type RoundView = {
+  ok: true;
+  round_label: string | null;
+  visit_week_start: string; // yyyy-mm-dd
+  visit_week_end: string;
+  deadline_at: string;
+};
+
+export async function getRoundBySlug(
+  slug: string,
+): Promise<RoundView | RpcFail> {
+  const { data, error } = await admin.rpc("get_round_by_slug", { p_slug: slug });
+  if (error) {
+    console.error("[get_round_by_slug]", error.message);
+    return { ok: false };
+  }
+  return data as RoundView | RpcFail;
+}
+
+export type PublicSubmitArgs = {
+  slug: string;
+  name: string;
+  phoneE164: string;
+  straat?: string;
+  huisnummer?: string;
+  postcode?: string;
+  plaats?: string;
+  workdays?: string[]; // yyyy-mm-dd
+  noWork?: boolean;
+};
+
+export async function submitPublicResponse(
+  args: PublicSubmitArgs,
+): Promise<{ ok: boolean; reason?: string; matched?: boolean }> {
+  const { data, error } = await admin.rpc("submit_public_response", {
+    p_slug: args.slug,
+    p_name: args.name,
+    p_phone_e164: args.phoneE164,
+    p_straat: args.straat ?? null,
+    p_huisnummer: args.huisnummer ?? null,
+    p_postcode: args.postcode ?? null,
+    p_plaats: args.plaats ?? null,
+    p_workdays: args.workdays ?? null,
+    p_no_work: args.noWork ?? false,
+  });
+  if (error) {
+    console.error("[submit_public_response]", error.message);
+    return { ok: false, reason: "server_error" };
+  }
+  return data as { ok: boolean; reason?: string; matched?: boolean };
+}

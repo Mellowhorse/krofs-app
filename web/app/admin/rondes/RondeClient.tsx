@@ -18,7 +18,35 @@ export type ActiveRound = {
   invitesTotal: number;
   pendingCount: number;
   respondedCount: number;
+  shareUrl: string | null;
 };
+
+function ShareLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="sharebox">
+      <div className="sharebox-title">Deel deze link in je WhatsApp-verzendlijst</div>
+      <p className="muted" style={{ fontSize: 13, margin: "2px 0 8px" }}>
+        Eén link voor iedereen. De schilder vult zelf naam, 06-nummer, adres en
+        dagen in. Vraag ze wel je nummer op te slaan, anders komt een broadcast
+        niet aan.
+      </p>
+      <div className="sharerow">
+        <input className="shareinput" readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
+        <button
+          className="btn-sm btn-wa"
+          onClick={() => {
+            navigator.clipboard?.writeText(url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+        >
+          {copied ? "Gekopieerd" : "Kopieer link"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function fmt(d: string | null): string {
   if (!d) return "—";
@@ -155,6 +183,7 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
             Berichten gaan automatisch via de cron; &ldquo;Verstuur nu&rdquo; doet het
             direct. In sandbox-modus is dit een test (geen echte WhatsApp).
           </p>
+          {active.shareUrl ? <ShareLink url={active.shareUrl} /> : null}
         </div>
       ) : (
         <div className="roundcard">

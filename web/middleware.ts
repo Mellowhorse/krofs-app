@@ -31,6 +31,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except static assets, the public painter route, and machine APIs.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|r/|api/).*)"],
+  // Everything except static assets, the public painter routes, and machine APIs.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|r/|u/|api/).*)"],
 };

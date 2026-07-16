@@ -61,6 +61,9 @@ jobs:
       - name: Apply db/009 (route clustering)
         run: psql -v ON_ERROR_STOP=1 -f db/009_route_clustering.sql
 
+      - name: Apply db/010 (public intake)
+        run: psql -v ON_ERROR_STOP=1 -f db/010_public_intake.sql
+
       - name: Seed (synthetic dev data must load cleanly)
         run: psql -v ON_ERROR_STOP=1 -f db/seed_dev.sql
 

@@ -181,6 +181,12 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .btn-sm:hover { background: var(--bg); }
 .btn-wa { background: #25D366; color: #073d1c; border-color: #1eb257; font-weight: 500; }
 
+/* ---------- deelbare intake-link (broadcast) ---------- */
+.sharebox { margin-top: 14px; padding: 12px 14px; background: var(--accent-bg); border: 0.5px solid var(--accent-border); border-radius: 10px; }
+.sharebox-title { font-weight: 600; font-size: 14px; color: var(--accent); }
+.sharerow { display: flex; gap: 8px; align-items: center; }
+.shareinput { flex: 1; min-width: 0; font-size: 13px; padding: 8px 10px; border: 0.5px solid var(--accent-border); border-radius: 8px; background: #fff; color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
 /* ---------- adressen fix-queue ---------- */
 .fixrow { background: #fff; border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
 .fixrow-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
