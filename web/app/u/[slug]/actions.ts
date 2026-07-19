@@ -1,17 +1,7 @@
 "use server";
 
 import { normalizeNLPhone } from "@/lib/phone";
-import { lookupByPostcode, type AddressLookup } from "@/lib/geocode";
 import { submitPublicResponse, type PublicSubmitArgs } from "@/lib/supabaseAdmin";
-
-// Postcode + huisnummer -> verified address (PDOK). Used by the form to autofill
-// straat/plaats so the schilder can never submit an incomplete/wrong address.
-export async function lookupAddressAction(
-  postcode: string,
-  huisnummer: string,
-): Promise<AddressLookup> {
-  return lookupByPostcode(postcode, huisnummer);
-}
 
 export type PublicFormArgs = {
   slug: string;

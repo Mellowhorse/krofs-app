@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { submitAction } from "./actions";
+import AddressPicker, { type Address } from "@/app/AddressPicker";
 import type { InviteView } from "@/lib/supabaseAdmin";
 
 const WD = ["ma", "di", "wo", "do", "vr", "za", "zo"];
@@ -63,10 +64,13 @@ export default function PainterForm({
     return `${s.getDate()}–${e.getDate()} ${MONTHS[e.getMonth()]}`;
   }, [invite.visit_week_start, invite.visit_week_end]);
 
-  const [straat, setStraat] = useState(invite.prefill?.straat ?? "");
-  const [huisnummer, setHuisnummer] = useState(invite.prefill?.huisnummer ?? "");
-  const [postcode, setPostcode] = useState(invite.prefill?.postcode ?? "");
-  const [plaats, setPlaats] = useState(invite.prefill?.plaats ?? "");
+  const [addr, setAddr] = useState<Address>({
+    postcode: invite.prefill?.postcode ?? "",
+    huisnummer: invite.prefill?.huisnummer ?? "",
+    straat: invite.prefill?.straat ?? "",
+    plaats: invite.prefill?.plaats ?? "",
+  });
+  const resolveRef = useRef<(() => Promise<boolean>) | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -85,8 +89,15 @@ export default function PainterForm({
     setErr(null);
     const workdays = [...selected].sort();
     if (!noWork) {
-      if (!straat.trim() || !huisnummer.trim() || !plaats.trim()) {
-        setErr("Vul straat, huisnummer en plaats in.");
+      if (!addr.postcode.trim() || !addr.huisnummer.trim()) {
+        setErr("Vul postcode en huisnummer in.");
+        return;
+      }
+      setSubmitting(true);
+      const ok = (await resolveRef.current?.()) ?? false;
+      setSubmitting(false);
+      if (!ok) {
+        setErr("Controleer je adres — zoek postcode + huisnummer op, of vul straat en plaats in.");
         return;
       }
       if (workdays.length === 0) {
@@ -97,10 +108,10 @@ export default function PainterForm({
     setSubmitting(true);
     const res = await submitAction({
       token,
-      straat,
-      huisnummer,
-      postcode,
-      plaats,
+      straat: addr.straat,
+      huisnummer: addr.huisnummer,
+      postcode: addr.postcode,
+      plaats: addr.plaats,
       workdays,
       noWork,
     });
@@ -133,8 +144,8 @@ export default function PainterForm({
               <div className="summary">
                 <div className="k">Locatie</div>
                 <div className="v">
-                  {straat} {huisnummer}
-                  {postcode ? `, ${postcode}` : ""} {plaats}
+                  {addr.straat} {addr.huisnummer}
+                  {addr.postcode ? `, ${addr.postcode}` : ""} {addr.plaats}
                 </div>
                 <div className="k">Dagen</div>
                 <div className="v">{chosen || "—"}</div>
@@ -176,40 +187,11 @@ export default function PainterForm({
               {invite.prefill.plaats}. Klopt dat nog? Pas anders aan.
             </p>
           ) : null}
-          <p className="flabel">Straat</p>
-          <input
-            type="text"
-            className="mb10"
-            value={straat}
-            onChange={(e) => setStraat(e.target.value)}
-            autoComplete="off"
-          />
-          <div className="grid2 mb10">
-            <div>
-              <p className="flabel">Huisnr.</p>
-              <input
-                type="text"
-                value={huisnummer}
-                onChange={(e) => setHuisnummer(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <p className="flabel">Postcode</p>
-              <input
-                type="text"
-                value={postcode}
-                onChange={(e) => setPostcode(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-          </div>
-          <p className="flabel">Plaats</p>
-          <input
-            type="text"
-            value={plaats}
-            onChange={(e) => setPlaats(e.target.value)}
-            autoComplete="off"
+          <AddressPicker
+            value={addr}
+            onChange={setAddr}
+            resolveRef={resolveRef}
+            initialManual={!!invite.prefill}
           />
 
           <div className="seclabel">Op welke dagen ben je daar?</div>
