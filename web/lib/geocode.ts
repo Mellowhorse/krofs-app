@@ -1,9 +1,11 @@
 import "server-only";
 
-// Address -> lat/lng. Google Geocoding API when GOOGLE_MAPS_API_KEY is set,
-// otherwise a deterministic STUB (near Amersfoort) so the whole geocode sweep
-// can be exercised without a key. Classifies into ok / ambiguous / not_found /
-// error (transient) — the sweep maps those onto invite_responses.geocode_status.
+// Address -> lat/lng. Provider order: GEOCODE_PROVIDER=stub (offline tests) ->
+// Google Geocoding API when GOOGLE_MAPS_API_KEY is set -> otherwise PDOK
+// Locatieserver (Kadaster, free, no API key, NL only). Classifies into
+// ok / ambiguous / not_found / error (transient) — the sweep maps those onto
+// invite_responses.geocode_status. lookupByPostcode() powers the form's
+// postcode+huisnummer -> verified address autofill.
 
 export type GeoResult =
   | { status: "ok" | "ambiguous"; lat: number; lng: number; placeId?: string; confidence?: string; error?: string }
@@ -61,10 +63,8 @@ function stub(a: Addr): GeoResult {
   return { status: "ok", lat: r6(lat), lng: r6(lng), placeId: `stub_${h}`, confidence: "STUB" };
 }
 
-export async function geocodeAddress(a: Addr): Promise<GeoResult> {
-  const key = process.env.GOOGLE_MAPS_API_KEY;
-  if (!key) return stub(a);
-
+async function google(a: Addr): Promise<GeoResult> {
+  const key = process.env.GOOGLE_MAPS_API_KEY!;
   const region = process.env.GEOCODE_REGION || "nl";
   const url =
     `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(fullAddress(a))}` +
@@ -107,7 +107,126 @@ export async function geocodeAddress(a: Addr): Promise<GeoResult> {
     case "UNKNOWN_ERROR":
       return { status: "error", error: json.status }; // transient — retried
     default:
-      // REQUEST_DENIED / INVALID_REQUEST etc.
       return { status: "error", error: json.error_message || json.status };
   }
+}
+
+// ---- PDOK Locatieserver (Kadaster; free, no key, NL) -----------------------
+
+const PDOK_BASE = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free";
+
+type PdokDoc = {
+  weergavenaam?: string;
+  centroide_ll?: string; // "POINT(lng lat)"
+  straatnaam?: string;
+  huisnummer?: number;
+  huisletter?: string;
+  huisnummertoevoeging?: string;
+  postcode?: string;
+  woonplaatsnaam?: string;
+};
+
+function normPostcode(pc: string | null): string {
+  return (pc ?? "").replace(/\s+/g, "").toUpperCase();
+}
+function houseDigits(nr: string): string {
+  return /\d+/.exec(nr ?? "")?.[0] ?? "";
+}
+function parseLatLng(centroide?: string): { lat: number; lng: number } | null {
+  const m = /POINT\(([-\d.]+)\s+([-\d.]+)\)/.exec(centroide ?? "");
+  return m ? { lng: parseFloat(m[1]), lat: parseFloat(m[2]) } : null;
+}
+
+// Exact address by postcode + house number (the reliable NL key). Returns the
+// best-matching adres doc, or null. Prefers an exact house-number+letter match.
+async function pdokExact(postcode: string, huisnummer: string): Promise<PdokDoc | null> {
+  const pc = normPostcode(postcode);
+  const nr = houseDigits(huisnummer);
+  if (!/^\d{4}[A-Z]{2}$/.test(pc) || !nr) return null;
+  const url =
+    `${PDOK_BASE}?q=*:*&rows=8` +
+    `&fl=weergavenaam,centroide_ll,straatnaam,huisnummer,huisletter,huisnummertoevoeging,postcode,woonplaatsnaam` +
+    `&fq=${encodeURIComponent("type:adres")}` +
+    `&fq=${encodeURIComponent(`postcode:${pc}`)}` +
+    `&fq=${encodeURIComponent(`huisnummer:${nr}`)}`;
+  const res = await fetch(url, { cache: "no-store" });
+  const json = await res.json();
+  const docs: PdokDoc[] = json?.response?.docs ?? [];
+  if (docs.length === 0) return null;
+  const suffix = (huisnummer.match(/\d+\s*(.*)$/)?.[1] ?? "").replace(/\s+/g, "").toLowerCase();
+  if (suffix) {
+    const exact = docs.find(
+      (d) =>
+        `${d.huisletter ?? ""}${d.huisnummertoevoeging ?? ""}`.replace(/\s+/g, "").toLowerCase() ===
+        suffix,
+    );
+    if (exact) return exact;
+  }
+  return docs[0];
+}
+
+export type AddressLookup =
+  | { ok: true; straat: string; huisnummer: string; postcode: string; plaats: string; lat: number; lng: number }
+  | { ok: false; reason: "invalid" | "not_found" | "error" };
+
+// Form-facing: postcode + huisnummer -> a verified, complete address.
+export async function lookupByPostcode(
+  postcode: string,
+  huisnummer: string,
+): Promise<AddressLookup> {
+  const pc = normPostcode(postcode);
+  if (!/^\d{4}[A-Z]{2}$/.test(pc) || !houseDigits(huisnummer)) {
+    return { ok: false, reason: "invalid" };
+  }
+  try {
+    const doc = await pdokExact(pc, huisnummer);
+    if (!doc) return { ok: false, reason: "not_found" };
+    const ll = parseLatLng(doc.centroide_ll);
+    if (!ll) return { ok: false, reason: "error" };
+    const nr =
+      `${doc.huisnummer ?? houseDigits(huisnummer)}${doc.huisletter ?? ""}` +
+      (doc.huisnummertoevoeging ? `-${doc.huisnummertoevoeging}` : "");
+    return {
+      ok: true,
+      straat: doc.straatnaam ?? "",
+      huisnummer: nr,
+      postcode: `${pc.slice(0, 4)} ${pc.slice(4)}`,
+      plaats: doc.woonplaatsnaam ?? "",
+      lat: r6(ll.lat),
+      lng: r6(ll.lng),
+    };
+  } catch {
+    return { ok: false, reason: "error" };
+  }
+}
+
+async function pdok(a: Addr): Promise<GeoResult> {
+  try {
+    if (a.postcode && a.huisnummer) {
+      const doc = await pdokExact(a.postcode, a.huisnummer);
+      const ll = doc && parseLatLng(doc.centroide_ll);
+      if (ll) {
+        return { status: "ok", lat: r6(ll.lat), lng: r6(ll.lng), placeId: doc?.weergavenaam, confidence: "pdok:exact" };
+      }
+    }
+    // fuzzy fallback (manual entry, no/invalid postcode) — less trustworthy
+    const q = [`${a.straat} ${a.huisnummer}`.trim(), a.postcode ?? "", a.plaats].filter(Boolean).join(" ");
+    const url = `${PDOK_BASE}?q=${encodeURIComponent(q)}&rows=1&fl=weergavenaam,centroide_ll&fq=${encodeURIComponent("type:adres")}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const json = await res.json();
+    const doc: PdokDoc | undefined = json?.response?.docs?.[0];
+    if (!doc) return { status: "not_found", error: "adres niet gevonden" };
+    const ll = parseLatLng(doc.centroide_ll);
+    if (!ll) return { status: "error", error: "geen coördinaat" };
+    // no exact postcode hit => flag for review
+    return { status: "ambiguous", lat: r6(ll.lat), lng: r6(ll.lng), placeId: doc.weergavenaam, confidence: "pdok:fuzzy", error: "geen exacte postcode-match" };
+  } catch (e) {
+    return { status: "error", error: e instanceof Error ? e.message : "netwerkfout" };
+  }
+}
+
+export async function geocodeAddress(a: Addr): Promise<GeoResult> {
+  if (process.env.GEOCODE_PROVIDER === "stub") return stub(a);
+  if (process.env.GOOGLE_MAPS_API_KEY) return google(a);
+  return pdok(a);
 }

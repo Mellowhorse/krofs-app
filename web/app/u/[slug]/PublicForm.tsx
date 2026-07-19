@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { submitPublicAction } from "./actions";
+import { submitPublicAction, lookupAddressAction } from "./actions";
 import type { RoundView } from "@/lib/supabaseAdmin";
 
 const WD = ["ma", "di", "wo", "do", "vr", "za", "zo"];
@@ -42,6 +42,8 @@ function reasonNL(reason?: string): string {
   }
 }
 
+type LookState = "idle" | "searching" | "found" | "notfound" | "invalid";
+
 export default function PublicForm({
   slug,
   round,
@@ -66,10 +68,12 @@ export default function PublicForm({
 
   const [naam, setNaam] = useState("");
   const [telefoon, setTelefoon] = useState("");
-  const [straat, setStraat] = useState("");
-  const [huisnummer, setHuisnummer] = useState("");
   const [postcode, setPostcode] = useState("");
+  const [huisnummer, setHuisnummer] = useState("");
+  const [straat, setStraat] = useState("");
   const [plaats, setPlaats] = useState("");
+  const [look, setLook] = useState<LookState>("idle");
+  const [manual, setManual] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -84,27 +88,69 @@ export default function PublicForm({
     });
   }
 
+  // Reset the resolved address when the postcode/huisnummer change again.
+  function onPc(v: string) {
+    setPostcode(v);
+    if (look === "found") { setLook("idle"); setManual(false); }
+  }
+  function onNr(v: string) {
+    setHuisnummer(v);
+    if (look === "found") { setLook("idle"); setManual(false); }
+  }
+
+  async function doLookup(): Promise<boolean> {
+    if (!postcode.trim() || !huisnummer.trim()) {
+      setLook("invalid");
+      return false;
+    }
+    setLook("searching");
+    const res = await lookupAddressAction(postcode, huisnummer);
+    if (res.ok) {
+      setStraat(res.straat);
+      setPlaats(res.plaats);
+      setPostcode(res.postcode);
+      setHuisnummer(res.huisnummer);
+      setManual(false);
+      setLook("found");
+      return true;
+    }
+    if (res.reason === "invalid") {
+      setLook("invalid");
+      return false;
+    }
+    setManual(true); // not_found / error -> let them fill straat + plaats
+    setLook("notfound");
+    return false;
+  }
+
   async function submit(noWork: boolean) {
     setErr(null);
-    if (!naam.trim()) {
-      setErr("Vul je naam in.");
-      return;
-    }
-    if (!telefoon.trim()) {
-      setErr("Vul je 06-nummer in.");
-      return;
-    }
+    if (!naam.trim()) return setErr("Vul je naam in.");
+    if (!telefoon.trim()) return setErr("Vul je 06-nummer in.");
+
     const workdays = [...selected].sort();
     if (!noWork) {
-      if (!straat.trim() || !huisnummer.trim() || !plaats.trim()) {
-        setErr("Vul straat, huisnummer en plaats in.");
-        return;
+      if (!postcode.trim() || !huisnummer.trim())
+        return setErr("Vul postcode en huisnummer in.");
+      // resolve the address if the schilder didn't press "Zoek adres" yet
+      if (look !== "found" && !manual) {
+        setSubmitting(true);
+        const ok = await doLookup();
+        setSubmitting(false);
+        if (!ok) {
+          return setErr(
+            manual || look === "notfound"
+              ? "Vul straat en plaats even zelf in."
+              : "Controleer postcode en huisnummer.",
+          );
+        }
       }
-      if (workdays.length === 0) {
-        setErr('Kies minstens één dag, of tik "ik werk deze week niet".');
-        return;
-      }
+      if (!straat.trim() || !plaats.trim())
+        return setErr("Vul straat en plaats in.");
+      if (workdays.length === 0)
+        return setErr('Kies minstens één dag, of tik "ik werk deze week niet".');
     }
+
     setSubmitting(true);
     const res = await submitPublicAction({
       slug,
@@ -201,41 +247,79 @@ export default function PublicForm({
           />
 
           <div className="seclabel">Waar werk je?</div>
-          <p className="flabel">Straat</p>
-          <input
-            type="text"
-            className="mb10"
-            value={straat}
-            onChange={(e) => setStraat(e.target.value)}
-            autoComplete="off"
-          />
           <div className="grid2 mb10">
-            <div>
-              <p className="flabel">Huisnr.</p>
-              <input
-                type="text"
-                value={huisnummer}
-                onChange={(e) => setHuisnummer(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
             <div>
               <p className="flabel">Postcode</p>
               <input
                 type="text"
                 value={postcode}
-                onChange={(e) => setPostcode(e.target.value)}
+                onChange={(e) => onPc(e.target.value)}
+                placeholder="1234 AB"
+                autoComplete="postal-code"
+              />
+            </div>
+            <div>
+              <p className="flabel">Huisnr.</p>
+              <input
+                type="text"
+                value={huisnummer}
+                onChange={(e) => onNr(e.target.value)}
+                inputMode="numeric"
                 autoComplete="off"
               />
             </div>
           </div>
-          <p className="flabel">Plaats</p>
-          <input
-            type="text"
-            value={plaats}
-            onChange={(e) => setPlaats(e.target.value)}
-            autoComplete="off"
-          />
+
+          {look !== "found" && !manual ? (
+            <button
+              type="button"
+              className="btn btn-ghost addr-lookup"
+              onClick={doLookup}
+              disabled={look === "searching"}
+            >
+              {look === "searching" ? "Zoeken…" : "Zoek adres"}
+            </button>
+          ) : null}
+
+          {look === "invalid" ? (
+            <p className="err">Vul een geldige postcode (1234 AB) en huisnummer in.</p>
+          ) : null}
+
+          {look === "found" && !manual ? (
+            <div className="addr-ok">
+              <span>
+                &#10003; {straat} {huisnummer}, {postcode} {plaats}
+              </span>
+              <button type="button" className="linkbtn" onClick={() => setManual(true)}>
+                klopt niet?
+              </button>
+            </div>
+          ) : null}
+
+          {manual ? (
+            <div className="mb10">
+              {look === "notfound" ? (
+                <p className="muted" style={{ fontSize: 13, margin: "0 0 8px" }}>
+                  Adres niet automatisch gevonden — vul straat en plaats even zelf in.
+                </p>
+              ) : null}
+              <p className="flabel">Straat</p>
+              <input
+                type="text"
+                className="mb10"
+                value={straat}
+                onChange={(e) => setStraat(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="flabel">Plaats</p>
+              <input
+                type="text"
+                value={plaats}
+                onChange={(e) => setPlaats(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          ) : null}
 
           <div className="seclabel">Op welke dagen ben je daar?</div>
           <div className="weeklabel">Week van {weekLabel}</div>

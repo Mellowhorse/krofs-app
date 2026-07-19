@@ -96,7 +96,8 @@ export async function geocodeResponses(limit = 20) {
     p_lease_seconds: 120,
   });
   const rows = (data ?? []) as GeoAddr[];
-  const provider = hasGoogleKey() ? "google" : "stub";
+  const provider =
+    process.env.GEOCODE_PROVIDER === "stub" ? "stub" : hasGoogleKey() ? "google" : "pdok";
   let ok = 0;
   let review = 0;
   let retry = 0;
