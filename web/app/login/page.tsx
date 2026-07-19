@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { signIn } from "./actions";
+import Logo from "@/app/Logo";
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState(signIn, null);
@@ -9,12 +10,8 @@ export default function LoginPage() {
     <div className="wrap">
       <div className="card" style={{ maxWidth: 380 }}>
         <div className="body">
-          <div className="brand">
-            <div className="logo">K</div>
-            <div>
-              <div className="name">Krofs</div>
-              <div className="sub">beheer</div>
-            </div>
+          <div className="brandmark">
+            <Logo height={72} />
           </div>
           <h1>Inloggen</h1>
           <form action={action}>

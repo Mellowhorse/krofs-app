@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { signOut } from "../login/actions";
+import Logo from "@/app/Logo";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,9 @@ export default async function AdminLayout({
   return (
     <div className="admin">
       <header className="adminbar">
-        <div className="adminbar-brand">
-          <span className="logo-sm">K</span> Krofs beheer
+        <div className="adminbrand">
+          <Logo height={34} />
+          <span className="sub">beheer</span>
         </div>
         <div className="adminbar-right">
           <span className="who">{admin.display_name ?? user.email}</span>
