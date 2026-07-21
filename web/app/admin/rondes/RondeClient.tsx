@@ -9,56 +9,126 @@ import {
   type SendLink,
 } from "./actions";
 
+export type MissingPainter = { id: string; name: string; phone: string };
+
 export type ActiveRound = {
   id: string;
   label: string | null;
   deadline_at: string | null;
   visit_week_start: string | null;
   visit_week_end: string | null;
-  invitesTotal: number;
-  pendingCount: number;
+  rosterTotal: number;
   respondedCount: number;
+  missing: MissingPainter[];
   shareUrl: string | null;
 };
-
-function ShareLink({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="sharebox">
-      <div className="sharebox-title">Deel deze link in je WhatsApp-verzendlijst</div>
-      <p className="muted" style={{ fontSize: 13, margin: "2px 0 8px" }}>
-        Eén link voor iedereen. De schilder vult zelf naam, 06-nummer, adres en
-        dagen in. Vraag ze wel je nummer op te slaan, anders komt een broadcast
-        niet aan.
-      </p>
-      <div className="sharerow">
-        <input className="shareinput" readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-        <button
-          className="btn-sm btn-wa"
-          onClick={() => {
-            navigator.clipboard?.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          }}
-        >
-          {copied ? "Gekopieerd" : "Kopieer link"}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function fmt(d: string | null): string {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 }
 
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="btn-sm btn-wa"
+      onClick={() => {
+        navigator.clipboard?.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? "Gekopieerd" : label}
+    </button>
+  );
+}
+
+function ShareLink({ url }: { url: string }) {
+  return (
+    <div className="sharebox">
+      <div className="sharebox-title">Deel deze link in je WhatsApp-verzendlijst</div>
+      <p className="muted" style={{ fontSize: 13, margin: "2px 0 8px" }}>
+        Eén link voor iedereen. De schilder vult zelf naam, 06-nummer, postcode +
+        huisnummer en dagen in. Vraag ze wel je nummer op te slaan, anders komt een
+        broadcast niet aan.
+      </p>
+      <div className="sharerow">
+        <input className="shareinput" readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
+        <CopyButton text={url} label="Kopieer link" />
+      </div>
+    </div>
+  );
+}
+
+function MissingList({ round }: { round: ActiveRound }) {
+  const [open, setOpen] = useState(false);
+  const url = round.shareUrl ?? "";
+  const broadcastReminder =
+    `Hoi! 👋 Kleine herinnering van Kees (Krofs) — ik hoor graag nog even waar je werkt ` +
+    `en op welke dagen, zodat ik langs kan komen. Invullen kan hier: ${url}`;
+
+  if (round.rosterTotal === 0) {
+    return (
+      <p className="muted" style={{ fontSize: 13, marginTop: 10 }}>
+        Nog geen schilderslijst geïmporteerd — daardoor kan ik niet tonen wie nog niet
+        gereageerd heeft. Importeer je lijst via <b>Schilders importeren</b>.
+      </p>
+    );
+  }
+  if (round.missing.length === 0) {
+    return (
+      <p className="ok-msg" style={{ marginTop: 10 }}>
+        Iedereen heeft gereageerd ({round.respondedCount}/{round.rosterTotal}).
+      </p>
+    );
+  }
+
+  return (
+    <div className="missing">
+      <div className="missing-head">
+        <button className="linkbtn" onClick={() => setOpen((o) => !o)}>
+          {open ? "▾" : "▸"} Nog geen reactie ({round.missing.length})
+        </button>
+        {url ? <CopyButton text={broadcastReminder} label="Kopieer reminder-tekst" /> : null}
+      </div>
+      {open ? (
+        <div className="links" style={{ marginTop: 4 }}>
+          {round.missing.map((p) => {
+            const first = p.name.split(" ")[0];
+            const msg =
+              `Hoi ${first}, kleine herinnering van Kees (Krofs) — laat je even weten ` +
+              `waar je werkt en op welke dagen? ${url}`;
+            const wa = p.phone
+              ? `https://wa.me/${p.phone.replace(/^\+/, "")}?text=${encodeURIComponent(msg)}`
+              : null;
+            return (
+              <div className="linkrow" key={p.id}>
+                <div className="linkrow-main">
+                  <div className="linkrow-name">{p.name}</div>
+                  <div className="linkrow-phone muted">{p.phone || "geen nummer"}</div>
+                </div>
+                <div className="linkrow-actions">
+                  {wa ? (
+                    <a className="btn-sm btn-wa" href={wa} target="_blank" rel="noreferrer">
+                      Herinner
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function LinkList({ links }: { links: SendLink[] }) {
-  const [copied, setCopied] = useState<string | null>(null);
   return (
     <div className="links">
       <p className="intro">
-        {links.length} handmatige link{links.length === 1 ? "" : "s"}. Tik
+        {links.length} persoonlijke link{links.length === 1 ? "" : "s"}. Tik
         &ldquo;WhatsApp&rdquo; om het bericht te openen, of kopieer de link.
       </p>
       {links.map((l) => (
@@ -71,16 +141,7 @@ function LinkList({ links }: { links: SendLink[] }) {
             <a className="btn-sm btn-wa" href={l.waLink} target="_blank" rel="noreferrer">
               WhatsApp
             </a>
-            <button
-              className="btn-sm"
-              onClick={() => {
-                navigator.clipboard?.writeText(l.url);
-                setCopied(l.url);
-                setTimeout(() => setCopied((c) => (c === l.url ? null : c)), 1500);
-              }}
-            >
-              {copied === l.url ? "Gekopieerd" : "Kopieer link"}
-            </button>
+            <CopyButton text={l.url} label="Kopieer link" />
           </div>
         </div>
       ))}
@@ -146,29 +207,34 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
             <div>
               <div className="roundcard-title">{active.label ?? "Actieve ronde"}</div>
               <div className="muted">
-                {active.respondedCount}/{active.invitesTotal} gereageerd ·{" "}
-                {active.pendingCount} nog te versturen · deadline {fmt(active.deadline_at)} ·
-                bezoekweek {fmt(active.visit_week_start)}–{fmt(active.visit_week_end)}
+                {active.respondedCount} van {active.rosterTotal} gereageerd
+                {active.missing.length ? ` · ${active.missing.length} nog niet` : ""} ·
+                deadline {fmt(active.deadline_at)} · bezoekweek{" "}
+                {fmt(active.visit_week_start)}–{fmt(active.visit_week_end)}
               </div>
             </div>
             <span className="pill pill-ok">loopt</span>
           </div>
+
+          {active.shareUrl ? <ShareLink url={active.shareUrl} /> : null}
+          <MissingList round={active} />
+
           <div className="row-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              className="btn btn-primary"
-              style={{ width: "auto", padding: "9px 16px" }}
-              disabled={pending}
-              onClick={doDispatch}
-            >
-              {pending ? "Bezig…" : "Verstuur berichten nu"}
-            </button>
             <button
               className="btn btn-ghost"
               style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
               disabled={pending}
               onClick={() => doRegen(active.id)}
             >
-              Toon verzendlinks (handmatig)
+              Persoonlijke links (los van de verzendlijst)
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
+              disabled={pending}
+              onClick={doDispatch}
+            >
+              {pending ? "Bezig…" : "Automatisch versturen (Meta)"}
             </button>
             <button
               className="btn btn-ghost"
@@ -179,17 +245,12 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
               Sluit ronde
             </button>
           </div>
-          <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-            Berichten gaan automatisch via de cron; &ldquo;Verstuur nu&rdquo; doet het
-            direct. In sandbox-modus is dit een test (geen echte WhatsApp).
-          </p>
-          {active.shareUrl ? <ShareLink url={active.shareUrl} /> : null}
         </div>
       ) : (
         <div className="roundcard">
           <p className="intro">
-            Geen actieve ronde. Start er een — alle actieve schilders met opt-in
-            krijgen een unieke link via WhatsApp.
+            Geen actieve ronde. Start er een — je krijgt dan één deelbare link voor je
+            WhatsApp-verzendlijst.
           </p>
           <p className="flabel">Naam (optioneel)</p>
           <input

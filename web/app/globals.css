@@ -189,6 +189,11 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .btn-sm:hover { background: var(--bg); }
 .btn-wa { background: #25D366; color: #073d1c; border-color: #1eb257; font-weight: 500; }
 
+/* ---------- nog geen reactie ---------- */
+.missing { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--border); }
+.missing-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.missing-head .linkbtn { font-weight: 600; font-size: 14px; }
+
 /* ---------- adres-lookup (postcode -> adres) ---------- */
 .addr-lookup { width: auto; padding: 9px 16px; margin-top: 0; }
 .addr-ok {
