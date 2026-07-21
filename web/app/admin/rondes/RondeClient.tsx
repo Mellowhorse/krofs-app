@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   startRonde,
@@ -62,7 +63,6 @@ function ShareLink({ url }: { url: string }) {
 }
 
 function MissingList({ round }: { round: ActiveRound }) {
-  const [open, setOpen] = useState(false);
   const url = round.shareUrl ?? "";
   const broadcastReminder =
     `Hoi! 👋 Kleine herinnering van Kees (Krofs) — ik hoor graag nog even waar je werkt ` +
@@ -76,50 +76,19 @@ function MissingList({ round }: { round: ActiveRound }) {
       </p>
     );
   }
-  if (round.missing.length === 0) {
-    return (
-      <p className="ok-msg" style={{ marginTop: 10 }}>
-        Iedereen heeft gereageerd ({round.respondedCount}/{round.rosterTotal}).
-      </p>
-    );
-  }
 
   return (
     <div className="missing">
       <div className="missing-head">
-        <button className="linkbtn" onClick={() => setOpen((o) => !o)}>
-          {open ? "▾" : "▸"} Nog geen reactie ({round.missing.length})
-        </button>
-        {url ? <CopyButton text={broadcastReminder} label="Kopieer reminder-tekst" /> : null}
+        <Link className="linkbtn" href="/admin/reacties">
+          {round.missing.length
+            ? `Nog geen reactie (${round.missing.length}) — bekijk wie →`
+            : `Iedereen heeft gereageerd — bekijk de antwoorden →`}
+        </Link>
+        {url && round.missing.length ? (
+          <CopyButton text={broadcastReminder} label="Kopieer reminder-tekst" />
+        ) : null}
       </div>
-      {open ? (
-        <div className="links" style={{ marginTop: 4 }}>
-          {round.missing.map((p) => {
-            const first = p.name.split(" ")[0];
-            const msg =
-              `Hoi ${first}, kleine herinnering van Kees (Krofs) — laat je even weten ` +
-              `waar je werkt en op welke dagen? ${url}`;
-            const wa = p.phone
-              ? `https://wa.me/${p.phone.replace(/^\+/, "")}?text=${encodeURIComponent(msg)}`
-              : null;
-            return (
-              <div className="linkrow" key={p.id}>
-                <div className="linkrow-main">
-                  <div className="linkrow-name">{p.name}</div>
-                  <div className="linkrow-phone muted">{p.phone || "geen nummer"}</div>
-                </div>
-                <div className="linkrow-actions">
-                  {wa ? (
-                    <a className="btn-sm btn-wa" href={wa} target="_blank" rel="noreferrer">
-                      Herinner
-                    </a>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }
