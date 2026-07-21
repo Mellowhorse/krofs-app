@@ -25,6 +25,7 @@ const FILES = [
   "db/008_geocode.sql",
   "db/009_route_clustering.sql",
   "db/010_public_intake.sql",
+  "db/011_round_autolabel.sql",
   "db/seed_dev.sql",
   "db/tests/smoke_test.sql",
 ];

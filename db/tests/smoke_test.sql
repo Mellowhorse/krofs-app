@@ -263,4 +263,23 @@ begin
   raise notice 'T8 ok — public intake';
 end $$;
 
+-- T9 — ronde wordt automatisch benoemd naar zijn bezoekweek (db/011), zodat de
+-- naam nooit kan tegenspreken wat de berekende datums zeggen.
+do $$
+declare v_org uuid; v_rnd uuid; s date; e date; lbl text;
+begin
+  insert into organizations (name) values ('smoke-label') returning id into v_org;
+  insert into weekrondes (org_id, label, status, sent_at)
+    values (v_org, 'zelf getypte onzin', 'collecting', now()) returning id into v_rnd;
+  select visit_week_start, visit_week_end, label into s, e, lbl
+    from weekrondes where id = v_rnd;
+  if lbl is null or lbl not like 'Bezoekweek %' then
+    raise exception 'T9 auto-label niet gezet: %', lbl;
+  end if;
+  if position(extract(day from s)::int::text in lbl) = 0 then
+    raise exception 'T9 label bevat startdag niet: % (bezoekweek % t/m %)', lbl, s, e;
+  end if;
+  raise notice 'T9 ok — auto-label: %', lbl;
+end $$;
+
 select 'ALL SMOKE TESTS PASSED' as result;

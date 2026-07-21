@@ -14,12 +14,16 @@ type RegenRow = {
   raw_token: string;
 };
 
-export async function startRonde(
-  label: string,
-): Promise<{ ok: boolean; count?: number; error?: string }> {
+// De ronde wordt door de DB benoemd naar zijn bezoekweek (db/011), dus hier
+// bewust geen vrije naam meer: die kon de berekende datums tegenspreken.
+export async function startRonde(): Promise<{
+  ok: boolean;
+  count?: number;
+  error?: string;
+}> {
   const supabase = await supabaseServer();
   const { data, error } = await supabase.rpc("start_weekronde", {
-    p_label: label || null,
+    p_label: null,
     p_painter_ids: null,
   });
   if (error) return { ok: false, error: error.message };

@@ -150,7 +150,6 @@ function LinkList({ links }: { links: SendLink[] }) {
 }
 
 export default function RondeClient({ active }: { active: ActiveRound | null }) {
-  const [label, setLabel] = useState("");
   const [links, setLinks] = useState<SendLink[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +159,7 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
     setError(null);
     setMsg(null);
     start(async () => {
-      const res = await startRonde(label);
+      const res = await startRonde();
       if (!res.ok) setError(res.error ?? "Starten mislukt.");
       else {
         setMsg(`Ronde gestart — ${res.count} schilder(s) uitgenodigd.`);
@@ -252,14 +251,11 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
             Geen actieve ronde. Start er een — je krijgt dan één deelbare link voor je
             WhatsApp-verzendlijst.
           </p>
-          <p className="flabel">Naam (optioneel)</p>
-          <input
-            type="text"
-            className="mb10"
-            placeholder="bijv. Week 30"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          />
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 12px" }}>
+            De datums volgen automatisch uit het moment van starten: schilders kunnen{" "}
+            <b>5 dagen</b> invullen, daarna sluit de ronde, en de <b>bezoekweek</b> is de
+            eerste hele werkweek (ma–vr) daarna. De ronde krijgt die bezoekweek als naam.
+          </p>
           <button
             className="btn btn-primary"
             style={{ width: "auto", padding: "10px 18px" }}
