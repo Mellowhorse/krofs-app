@@ -282,4 +282,62 @@ begin
   raise notice 'T9 ok — auto-label: %', lbl;
 end $$;
 
+-- T10 — Kees kiest de bezoekweek (db/012): moet een maandag zijn, moet ná de
+-- deadline liggen, en een schilder kan geen dag doorgeven waarop hij niet komt.
+do $$
+declare
+  v_org uuid; v_rnd uuid; vws date; ok boolean;
+  v_p uuid; v_inv uuid; v_resp uuid;
+begin
+  insert into organizations (name) values ('smoke-week') returning id into v_org;
+
+  -- geldig: maandag ruim na de deadline; Kees kan alleen ma (1) en wo (3)
+  vws := date_trunc('week', (now() + interval '40 days'))::date;
+  insert into weekrondes (org_id, status, sent_at, visit_week_start, visit_weekdays)
+  values (v_org, 'collecting', now(), vws, array[1,3]::smallint[])
+  returning id into v_rnd;
+  if (select visit_week_end from weekrondes where id = v_rnd) <> vws + 4 then
+    raise exception 'T10 visit_week_end is niet visit_week_start + 4';
+  end if;
+
+  -- een dinsdag als weekstart moet worden geweigerd
+  ok := false;
+  begin
+    insert into weekrondes (org_id, status, sent_at, visit_week_start)
+    values (v_org, 'draft', now(), vws + 1);
+  exception when others then ok := true;
+  end;
+  if not ok then raise exception 'T10 niet-maandag werd geaccepteerd'; end if;
+
+  -- een week die vóór de deadline begint moet worden geweigerd
+  ok := false;
+  begin
+    insert into weekrondes (org_id, status, sent_at, visit_week_start)
+    values (v_org, 'draft', now(), date_trunc('week', now())::date);
+  exception when others then ok := true;
+  end;
+  if not ok then raise exception 'T10 week voor de deadline werd geaccepteerd'; end if;
+
+  -- schilder mag ma (wel beschikbaar), maar geen di (niet beschikbaar)
+  insert into painters (org_id, full_name, wa_phone_e164, wa_opt_in_status, is_active)
+  values (v_org, 'Week Tester', '+31600009901', 'opted_in', true) returning id into v_p;
+  insert into round_invites (round_id, painter_id, org_id, token_hash, status)
+  values (v_rnd, v_p, v_org, 'smoke-week-hash', 'responded') returning id into v_inv;
+  insert into invite_responses (invite_id, round_id, org_id, straat, huisnummer, plaats, geocode_status)
+  values (v_inv, v_rnd, v_org, 'Straat', '1', 'Amersfoort', 'pending') returning id into v_resp;
+
+  insert into response_workdays (response_id, round_id, work_date, weekday)
+  values (v_resp, v_rnd, vws, 1);
+
+  ok := false;
+  begin
+    insert into response_workdays (response_id, round_id, work_date, weekday)
+    values (v_resp, v_rnd, vws + 1, 2);
+  exception when others then ok := true;
+  end;
+  if not ok then raise exception 'T10 dag buiten beschikbaarheid werd geaccepteerd'; end if;
+
+  raise notice 'T10 ok — bezoekweek-keuze en beschikbaarheid bewaakt';
+end $$;
+
 select 'ALL SMOKE TESTS PASSED' as result;

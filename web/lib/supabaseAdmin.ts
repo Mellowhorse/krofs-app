@@ -22,6 +22,7 @@ export type InviteView = {
   round_label: string | null;
   visit_week_start: string; // yyyy-mm-dd
   visit_week_end: string;
+  visit_weekdays: number[]; // isodow 1=ma..5=vr waarop de beheerder langskomt
   deadline_at: string;
   prefill: {
     straat: string;
@@ -82,6 +83,7 @@ export type RoundView = {
   round_label: string | null;
   visit_week_start: string; // yyyy-mm-dd
   visit_week_end: string;
+  visit_weekdays: number[]; // isodow 1=ma..5=vr waarop de beheerder langskomt
   deadline_at: string;
 };
 

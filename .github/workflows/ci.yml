@@ -67,6 +67,9 @@ jobs:
       - name: Apply db/011 (round auto-label)
         run: psql -v ON_ERROR_STOP=1 -f db/011_round_autolabel.sql
 
+      - name: Apply db/012 (visit week choice)
+        run: psql -v ON_ERROR_STOP=1 -f db/012_visit_week_choice.sql
+
       - name: Seed (synthetic dev data must load cleanly)
         run: psql -v ON_ERROR_STOP=1 -f db/seed_dev.sql
 

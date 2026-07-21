@@ -52,11 +52,12 @@ export default function PublicForm({
 }) {
   const days = useMemo(() => {
     const start = parseYmd(round.visit_week_start);
+    const toegestaan = new Set(round.visit_weekdays ?? [1, 2, 3, 4, 5]);
     return Array.from({ length: 5 }, (_, i) => {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
-      return { value: ymd(d), label: WD[i], num: d.getDate() };
-    });
+      return { value: ymd(d), label: WD[i], num: d.getDate(), dow: i + 1 };
+    }).filter((d) => toegestaan.has(d.dow));
   }, [round.visit_week_start]);
 
   const weekLabel = useMemo(() => {

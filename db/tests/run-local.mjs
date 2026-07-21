@@ -26,6 +26,7 @@ const FILES = [
   "db/009_route_clustering.sql",
   "db/010_public_intake.sql",
   "db/011_round_autolabel.sql",
+  "db/012_visit_week_choice.sql",
   "db/seed_dev.sql",
   "db/tests/smoke_test.sql",
 ];

@@ -11,6 +11,111 @@ import {
 } from "./actions";
 
 export type MissingPainter = { id: string; name: string; phone: string };
+export type WeekOption = { value: string; label: string };
+
+const WD = ["ma", "di", "wo", "do", "vr"];
+
+// Dagnummers van de gekozen week (maandag t/m vrijdag).
+function weekDates(monday: string): number[] {
+  const [y, m, d] = monday.split("-").map(Number);
+  return Array.from({ length: 5 }, (_, i) => {
+    const dt = new Date(Date.UTC(y, m - 1, d + i));
+    return dt.getUTCDate();
+  });
+}
+
+function NieuweRonde({
+  weeks,
+  laatsteInvuldag,
+  pending,
+  onStart,
+}: {
+  weeks: WeekOption[];
+  laatsteInvuldag: string;
+  pending: boolean;
+  onStart: (week: string, days: number[]) => void;
+}) {
+  const [week, setWeek] = useState(weeks[0]?.value ?? "");
+  const [days, setDays] = useState<Set<number>>(new Set([1, 2, 3, 4, 5]));
+  const nums = week ? weekDates(week) : [];
+
+  function toggle(n: number) {
+    setDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
+  }
+
+  const gekozen = [...days].sort();
+  const namen = gekozen.map((n) => WD[n - 1]).join(", ");
+
+  return (
+    <div className="roundcard">
+      <p className="intro">
+        Nieuwe ronde. Schilders kunnen invullen t/m <b>{laatsteInvuldag}</b>; daarna
+        sluit de ronde automatisch.
+      </p>
+
+      <p className="flabel">Welke week ga je langs?</p>
+      <select
+        className="mb10"
+        value={week}
+        onChange={(e) => setWeek(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "10px 12px",
+          fontSize: 14,
+          borderRadius: 10,
+          border: "0.5px solid var(--border-strong)",
+          background: "#fff",
+          color: "var(--text)",
+        }}
+      >
+        {weeks.map((w) => (
+          <option key={w.value} value={w.value}>
+            {w.label}
+          </option>
+        ))}
+      </select>
+
+      <p className="flabel">Op welke dagen kun jij langs?</p>
+      <div className="days">
+        {WD.map((label, i) => {
+          const n = i + 1;
+          return (
+            <button
+              key={label}
+              type="button"
+              className={`daypill${days.has(n) ? " sel" : ""}`}
+              aria-pressed={days.has(n)}
+              onClick={() => toggle(n)}
+            >
+              {label}
+              <br />
+              {nums[i] ?? ""}
+            </button>
+          );
+        })}
+      </div>
+      <p className="muted" style={{ fontSize: 12, margin: "8px 0 14px" }}>
+        {gekozen.length
+          ? `Schilders krijgen alleen ${namen} te zien.`
+          : "Kies minstens één dag waarop je langs kunt."}
+      </p>
+
+      <button
+        className="btn btn-primary"
+        style={{ width: "auto", padding: "10px 18px" }}
+        disabled={pending || !week || gekozen.length === 0}
+        onClick={() => onStart(week, gekozen)}
+      >
+        {pending ? "Bezig…" : "Start ronde"}
+      </button>
+    </div>
+  );
+}
 
 export type ActiveRound = {
   id: string;
@@ -118,17 +223,25 @@ function LinkList({ links }: { links: SendLink[] }) {
   );
 }
 
-export default function RondeClient({ active }: { active: ActiveRound | null }) {
+export default function RondeClient({
+  active,
+  weeks,
+  laatsteInvuldag,
+}: {
+  active: ActiveRound | null;
+  weeks: WeekOption[];
+  laatsteInvuldag: string;
+}) {
   const [links, setLinks] = useState<SendLink[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  function doStart() {
+  function doStart(week: string, days: number[]) {
     setError(null);
     setMsg(null);
     start(async () => {
-      const res = await startRonde();
+      const res = await startRonde(week, days);
       if (!res.ok) setError(res.error ?? "Starten mislukt.");
       else {
         setMsg(`Ronde gestart — ${res.count} schilder(s) uitgenodigd.`);
@@ -215,25 +328,12 @@ export default function RondeClient({ active }: { active: ActiveRound | null }) 
           </div>
         </div>
       ) : (
-        <div className="roundcard">
-          <p className="intro">
-            Geen actieve ronde. Start er een — je krijgt dan één deelbare link voor je
-            WhatsApp-verzendlijst.
-          </p>
-          <p className="muted" style={{ fontSize: 13, margin: "0 0 12px" }}>
-            De datums volgen automatisch uit het moment van starten: schilders kunnen{" "}
-            <b>5 dagen</b> invullen, daarna sluit de ronde, en de <b>bezoekweek</b> is de
-            eerste hele werkweek (ma–vr) daarna. De ronde krijgt die bezoekweek als naam.
-          </p>
-          <button
-            className="btn btn-primary"
-            style={{ width: "auto", padding: "10px 18px" }}
-            disabled={pending}
-            onClick={doStart}
-          >
-            {pending ? "Bezig…" : "Start ronde"}
-          </button>
-        </div>
+        <NieuweRonde
+          weeks={weeks}
+          laatsteInvuldag={laatsteInvuldag}
+          pending={pending}
+          onStart={doStart}
+        />
       )}
 
       {links ? <LinkList links={links} /> : null}
