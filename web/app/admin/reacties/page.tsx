@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabaseServer";
+import GeocodeButton from "./GeocodeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +142,7 @@ export default async function ReactiesPage() {
   }
 
   const reageerden = beschikbaar.length + nietAanHetWerk.length;
+  const wachtOpAdres = beschikbaar.filter((p) => p.geo === "pending").length;
 
   return (
     <div>
@@ -159,6 +161,10 @@ export default async function ReactiesPage() {
             <Link href="/admin/painters/import">Schilders importeren</Link>.
           </p>
         </div>
+      ) : null}
+
+      {wachtOpAdres > 0 ? (
+        <GeocodeButton count={wachtOpAdres} />
       ) : null}
 
       {beschikbaar.length ? (
