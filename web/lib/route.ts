@@ -212,7 +212,7 @@ function clusterResponses(
 // stop; a cluster whose members share no day is split across days. Ties on
 // coverage go to the LEAST-loaded day so stops spread over the admin's available
 // days instead of all piling on the earliest one.
-function assignStops(clusters: Cluster[]): StopGroup[] {
+function assignStops(clusters: Cluster[], cap: number): StopGroup[] {
   const dayLoad = new Map<string, number>(); // stops already placed per day
   const out: StopGroup[] = [];
 
@@ -224,20 +224,31 @@ function assignStops(clusters: Cluster[]): StopGroup[] {
         for (const d of m.workdays) tally.set(d, (tally.get(d) ?? 0) + 1);
       if (tally.size === 0) break; // members without any workday (defensive)
 
+      // Choose the day for this group. Keep same-address painters together
+      // (max coverage first), then prefer a day still under the cap so the
+      // busy days shed their flexible painters, then the least-loaded day.
       let day = "";
       let bestN = -1;
+      let bestUnder = false;
+      let bestLoad = 0;
       for (const [d, n] of tally) {
-        let better = day === "";
-        if (!better && n > bestN) better = true;
-        else if (!better && n === bestN) {
-          const load = dayLoad.get(d) ?? 0;
-          const bestLoad = dayLoad.get(day) ?? 0;
-          if (load < bestLoad) better = true;
-          else if (load === bestLoad && d < day) better = true;
+        const load = dayLoad.get(d) ?? 0;
+        const under = load < cap;
+        let better = false;
+        if (day === "") better = true;
+        else if (n > bestN) better = true;
+        else if (n === bestN) {
+          if (under && !bestUnder) better = true;
+          else if (under === bestUnder) {
+            if (load < bestLoad) better = true;
+            else if (load === bestLoad && d < day) better = true;
+          }
         }
         if (better) {
           day = d;
           bestN = n;
+          bestUnder = under;
+          bestLoad = load;
         }
       }
 
@@ -337,17 +348,24 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
   // Org settings for the wall-clock window.
   const { data: round } = await admin
     .from("weekrondes")
-    .select("id, org_id, organizations(timezone, day_start_local, dagdeel_split_local, max_working_minutes)")
+    .select("id, org_id, organizations(timezone, day_start_local, dagdeel_split_local, max_working_minutes, max_visits_per_day)")
     .eq("id", roundId)
     .single();
   if (!round) return { ok: false, error: "ronde niet gevonden" };
-  type OrgShape = { timezone: string; day_start_local: string; dagdeel_split_local: string; max_working_minutes: number };
+  type OrgShape = {
+    timezone: string;
+    day_start_local: string;
+    dagdeel_split_local: string;
+    max_working_minutes: number;
+    max_visits_per_day: number;
+  };
   const rawOrg = (round as unknown as { organizations: OrgShape | OrgShape[] }).organizations;
   const org = Array.isArray(rawOrg) ? rawOrg[0] : rawOrg;
   const tz = org.timezone;
   const dayStartMin = hhmmToMinutes(org.day_start_local);
   const splitMin = hhmmToMinutes(org.dagdeel_split_local);
   const maxMin = org.max_working_minutes;
+  const cap = org.max_visits_per_day || 10;
 
   // Routable responses (geocode ok OR admin override) with >=1 workday.
   const { data: resp } = await admin
@@ -397,7 +415,7 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
   // Turn clusters into per-day stops, spread over the admin's available days,
   // then group by date.
   const byDate = new Map<string, StopGroup[]>();
-  for (const s of assignStops(clusters)) {
+  for (const s of assignStops(clusters, cap)) {
     if (!s.date) continue;
     const list = byDate.get(s.date) ?? [];
     list.push(s);
@@ -420,7 +438,8 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
       const dayClusters = byDate.get(date)!;
       const { stops, totalDist, endMin } = await placeDay(dayClusters, date, tz, dayStartMin, splitMin);
       const durationS = (endMin - dayStartMin) * 60;
-      const oversub = endMin - dayStartMin > maxMin;
+      // "vol" = boven het dagmaximum (aantal) óf boven de werkdag (tijd)
+      const oversub = stops.length > cap || endMin - dayStartMin > maxMin;
 
       const { data: dayRow, error: dayErr } = await admin
         .from("route_days")
