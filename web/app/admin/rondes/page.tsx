@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabaseServer";
-import RondeClient, { type ActiveRound, type WeekOption } from "./RondeClient";
+import RondeClient, {
+  type ActiveRound,
+  type WeekOption,
+  type DagdeelInfo,
+} from "./RondeClient";
 
 export const dynamic = "force-dynamic";
 
@@ -102,10 +106,30 @@ export default async function RondesPage() {
   // Kiesbare bezoekweken (alleen relevant als er géén ronde loopt)
   const { data: org } = await supabase
     .from("organizations")
-    .select("deadline_days")
+    .select("deadline_days, day_start_local, dagdeel_split_local, max_working_minutes, max_visits_per_day")
     .limit(1)
     .maybeSingle();
   const { weeks, laatsteInvuldag } = buildWeekOptions(org?.deadline_days ?? 5);
+
+  // Tijdvenster + geschatte capaciteit per dagdeel, uit de org-instellingen.
+  const toMin = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + (m || 0);
+  };
+  const fmtMin = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const startMin = toMin(org?.day_start_local ?? "08:00");
+  const splitMin = toMin(org?.dagdeel_split_local ?? "12:00");
+  const endMin = startMin + (org?.max_working_minutes ?? 480);
+  const maxV = org?.max_visits_per_day ?? 10;
+  const PER_STOP = 45; // 30 min bezoek + ~15 min rijden
+  const capOf = (a: number, b: number) =>
+    Math.max(1, Math.min(maxV, Math.floor((b - a) / PER_STOP)));
+  const dagdelen: DagdeelInfo = {
+    heel: { label: `${fmtMin(startMin)}–${fmtMin(endMin)}`, cap: capOf(startMin, endMin) },
+    ochtend: { label: `${fmtMin(startMin)}–${fmtMin(splitMin)}`, cap: capOf(startMin, splitMin) },
+    middag: { label: `${fmtMin(splitMin)}–${fmtMin(endMin)}`, cap: capOf(splitMin, endMin) },
+  };
 
   return (
     <div>
@@ -113,7 +137,12 @@ export default async function RondesPage() {
         <Link href="/admin">Beheer</Link> / Rondes
       </p>
       <h1>Rondes</h1>
-      <RondeClient active={active} weeks={weeks} laatsteInvuldag={laatsteInvuldag} />
+      <RondeClient
+        active={active}
+        weeks={weeks}
+        laatsteInvuldag={laatsteInvuldag}
+        dagdelen={dagdelen}
+      />
     </div>
   );
 }

@@ -76,6 +76,9 @@ jobs:
       - name: Apply db/014 (max visits per day)
         run: psql -v ON_ERROR_STOP=1 -f db/014_max_visits_per_day.sql
 
+      - name: Apply db/015 (visit day parts)
+        run: psql -v ON_ERROR_STOP=1 -f db/015_visit_day_parts.sql
+
       - name: Seed (synthetic dev data must load cleanly)
         run: psql -v ON_ERROR_STOP=1 -f db/seed_dev.sql
 

@@ -216,6 +216,18 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .banner-link:hover { background: #fbe3d8; }
 .badge-accent { background: var(--accent-bg); color: var(--accent); }
 
+/* ---------- dagkeuze bij ronde starten ---------- */
+.dagkeuze { margin-top: 4px; }
+.dagrij { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 4px; border-radius: 10px; }
+.dagrij.dag-uit { background: var(--bg); }
+.dagrij-label { min-width: 56px; font-size: 14px; font-weight: 500; }
+.dag-uit .dagrij-label { color: var(--muted); }
+.dagrij-info { margin-left: auto; font-size: 12px; color: var(--muted); }
+.deelknop { padding: 5px 11px; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; background: transparent; color: var(--muted); border: 0.5px solid var(--border); }
+.deelknop:hover { background: var(--bg); }
+.deelknop.sel { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); font-weight: 500; }
+.deelknop.sel-uit { background: #d8d5cd; color: #2c2c2a; border-color: #b9b6ad; font-weight: 500; }
+
 .meer-opties { margin-top: 14px; }
 .meer-opties > summary { font-size: 13px; color: var(--muted); cursor: pointer; list-style: none; }
 .meer-opties > summary::-webkit-details-marker { display: none; }

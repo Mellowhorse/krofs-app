@@ -14,7 +14,19 @@ import {
 export type MissingPainter = { id: string; name: string; phone: string };
 export type WeekOption = { value: string; label: string };
 
+export type Dagdeel = "niet" | "heel" | "ochtend" | "middag";
+export type DagdeelInfo = Record<
+  Exclude<Dagdeel, "niet">,
+  { label: string; cap: number }
+>;
+
 const WD = ["ma", "di", "wo", "do", "vr"];
+const DEEL_LABEL: Record<Dagdeel, string> = {
+  niet: "niet",
+  heel: "hele dag",
+  ochtend: "ochtend",
+  middag: "middag",
+};
 
 // Dagnummers van de gekozen week (maandag t/m vrijdag).
 function weekDates(monday: string): number[] {
@@ -28,29 +40,28 @@ function weekDates(monday: string): number[] {
 function NieuweRonde({
   weeks,
   laatsteInvuldag,
+  dagdelen,
   pending,
   onStart,
 }: {
   weeks: WeekOption[];
   laatsteInvuldag: string;
+  dagdelen: DagdeelInfo;
   pending: boolean;
-  onStart: (week: string, days: number[]) => void;
+  onStart: (week: string, parts: Record<string, Dagdeel>) => void;
 }) {
   const [week, setWeek] = useState(weeks[0]?.value ?? "");
-  const [days, setDays] = useState<Set<number>>(new Set([1, 2, 3, 4, 5]));
+  // Standaard is elke dag een hele dag; Kees zet alleen de uitzonderingen om.
+  const [parts, setParts] = useState<Record<number, Dagdeel>>({
+    1: "heel", 2: "heel", 3: "heel", 4: "heel", 5: "heel",
+  });
   const nums = week ? weekDates(week) : [];
 
-  function toggle(n: number) {
-    setDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(n)) next.delete(n);
-      else next.add(n);
-      return next;
-    });
-  }
-
-  const gekozen = [...days].sort();
-  const namen = gekozen.map((n) => WD[n - 1]).join(", ");
+  const beschikbaar = [1, 2, 3, 4, 5].filter((n) => parts[n] !== "niet");
+  const totaal = beschikbaar.reduce(
+    (s, n) => s + dagdelen[parts[n] as Exclude<Dagdeel, "niet">].cap,
+    0,
+  );
 
   return (
     <div className="roundcard">
@@ -81,36 +92,56 @@ function NieuweRonde({
         ))}
       </select>
 
-      <p className="flabel">Op welke dagen kun jij langs?</p>
-      <div className="days">
+      <p className="flabel">
+        Wanneer kun jij langs? Zet de dagen die niet lukken op <b>niet</b>.
+      </p>
+      <div className="dagkeuze">
         {WD.map((label, i) => {
           const n = i + 1;
+          const deel = parts[n];
+          const uit = deel === "niet";
           return (
-            <button
-              key={label}
-              type="button"
-              className={`daypill${days.has(n) ? " sel" : ""}`}
-              aria-pressed={days.has(n)}
-              onClick={() => toggle(n)}
-            >
-              {label}
-              <br />
-              {nums[i] ?? ""}
-            </button>
+            <div className={`dagrij${uit ? " dag-uit" : ""}`} key={label}>
+              <span className="dagrij-label">
+                {label} {nums[i] ?? ""}
+              </span>
+              {(["niet", "heel", "ochtend", "middag"] as Dagdeel[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  className={`deelknop${deel === opt ? (opt === "niet" ? " sel-uit" : " sel") : ""}`}
+                  aria-pressed={deel === opt}
+                  onClick={() => setParts((p) => ({ ...p, [n]: opt }))}
+                >
+                  {DEEL_LABEL[opt]}
+                </button>
+              ))}
+              <span className="dagrij-info">
+                {uit
+                  ? "niet beschikbaar"
+                  : `${dagdelen[deel as Exclude<Dagdeel, "niet">].label} · ~${dagdelen[deel as Exclude<Dagdeel, "niet">].cap} bezoeken`}
+              </span>
+            </div>
           );
         })}
       </div>
-      <p className="muted" style={{ fontSize: 12, margin: "8px 0 14px" }}>
-        {gekozen.length
-          ? `Schilders krijgen alleen ${namen} te zien.`
+
+      <p className={beschikbaar.length ? "ok-msg" : "err"} style={{ margin: "10px 0 14px" }}>
+        {beschikbaar.length
+          ? `Ruimte voor ongeveer ${totaal} bezoeken deze week, verdeeld over ${beschikbaar.length} dag${beschikbaar.length === 1 ? "" : "en"}.`
           : "Kies minstens één dag waarop je langs kunt."}
       </p>
 
       <button
         className="btn btn-primary"
         style={{ width: "auto", padding: "10px 18px" }}
-        disabled={pending || !week || gekozen.length === 0}
-        onClick={() => onStart(week, gekozen)}
+        disabled={pending || !week || beschikbaar.length === 0}
+        onClick={() =>
+          onStart(
+            week,
+            Object.fromEntries(beschikbaar.map((n) => [String(n), parts[n]])),
+          )
+        }
       >
         {pending ? "Bezig…" : "Start ronde"}
       </button>
@@ -228,21 +259,23 @@ export default function RondeClient({
   active,
   weeks,
   laatsteInvuldag,
+  dagdelen,
 }: {
   active: ActiveRound | null;
   weeks: WeekOption[];
   laatsteInvuldag: string;
+  dagdelen: DagdeelInfo;
 }) {
   const [links, setLinks] = useState<SendLink[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  function doStart(week: string, days: number[]) {
+  function doStart(week: string, parts: Record<string, Dagdeel>) {
     setError(null);
     setMsg(null);
     start(async () => {
-      const res = await startRonde(week, days);
+      const res = await startRonde(week, parts);
       if (!res.ok) setError(res.error ?? "Starten mislukt.");
       else {
         setMsg(`Ronde gestart — ${res.count} schilder(s) uitgenodigd.`);
@@ -370,6 +403,7 @@ export default function RondeClient({
         <NieuweRonde
           weeks={weeks}
           laatsteInvuldag={laatsteInvuldag}
+          dagdelen={dagdelen}
           pending={pending}
           onStart={doStart}
         />
