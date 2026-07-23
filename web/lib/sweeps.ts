@@ -4,7 +4,10 @@ import { newSender, sendInvite } from "./whatsapp";
 import { geocodeAddress, distanceKm, hasGoogleKey } from "./geocode";
 
 const BASE = process.env.PUBLIC_BASE_URL || "http://localhost:3100";
-const FAR_KM = Number(process.env.GEOCODE_REVIEW_KM ?? "75");
+// Alleen echt-verre adressen naar de controlewachtrij (waarschijnlijk een
+// typefout); een correct adres in bv. Groningen (~150 km) blijft gewoon
+// routeerbaar. Zie review-batch 2.
+const FAR_KM = Number(process.env.GEOCODE_REVIEW_KM ?? "200");
 
 type ClaimRow = {
   raw_token: string;

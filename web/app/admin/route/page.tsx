@@ -24,6 +24,11 @@ function dateLabel(ymd: string): string {
   }).format(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
+type PainterRow = {
+  painter_name: string;
+  painters: { wa_phone_e164: string | null } | { wa_phone_e164: string | null }[] | null;
+};
+
 type StopRow = {
   id: string;
   seq: number;
@@ -34,9 +39,11 @@ type StopRow = {
   huisnummer: string;
   postcode: string | null;
   plaats: string;
+  lat: number;
+  lng: number;
   leg_distance_m: number | null;
   visited_at: string | null;
-  route_stop_painters: Array<{ painter_name: string }>;
+  route_stop_painters: PainterRow[];
 };
 
 type DayRow = {
@@ -88,7 +95,7 @@ export default async function RoutePage() {
     const { data: dayRows } = await supabase
       .from("route_days")
       .select(
-        "id, visit_date, total_distance_m, total_duration_s, is_oversubscribed, google_maps_url, route_stops(id, seq, dagdeel, planned_start, planned_end, straat, huisnummer, postcode, plaats, leg_distance_m, visited_at, route_stop_painters(painter_name))",
+        "id, visit_date, total_distance_m, total_duration_s, is_oversubscribed, google_maps_url, route_stops(id, seq, dagdeel, planned_start, planned_end, straat, huisnummer, postcode, plaats, lat, lng, leg_distance_m, visited_at, route_stop_painters(painter_name, painters(wa_phone_e164)))",
       )
       .eq("route_plan_id", plan.id)
       .order("visit_date");
@@ -108,7 +115,12 @@ export default async function RoutePage() {
           dagdeel: s.dagdeel,
           time: `${timeLabel(s.planned_start)}–${timeLabel(s.planned_end)}`,
           address: `${s.straat} ${s.huisnummer}${s.postcode ? `, ${s.postcode}` : ""} ${s.plaats}`,
-          painters: s.route_stop_painters.map((p) => p.painter_name),
+          lat: s.lat,
+          lng: s.lng,
+          painters: s.route_stop_painters.map((p) => {
+            const pn = Array.isArray(p.painters) ? p.painters[0] : p.painters;
+            return { name: p.painter_name, phone: pn?.wa_phone_e164 ?? null };
+          }),
           legKm: s.leg_distance_m != null ? Math.round(s.leg_distance_m / 100) / 10 : null,
           visited: s.visited_at != null,
         })),

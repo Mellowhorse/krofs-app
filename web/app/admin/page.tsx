@@ -53,9 +53,9 @@ export default async function AdminHome() {
           <div className="tile-title">Rondes</div>
           <div className="tile-sub">Ronde starten en links versturen</div>
         </Link>
-        <Link className="tile" href="/admin/painters/import">
-          <div className="tile-title">Schilders importeren</div>
-          <div className="tile-sub">CSV plakken → controleren → toevoegen</div>
+        <Link className="tile" href="/admin/painters">
+          <div className="tile-title">Schilders</div>
+          <div className="tile-sub">Toevoegen, bewerken of archiveren</div>
         </Link>
         <Link className="tile" href="/admin/reacties">
           <div className="tile-title">Reacties</div>

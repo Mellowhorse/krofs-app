@@ -189,6 +189,16 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .btn-sm:hover { background: var(--bg); }
 .btn-wa { background: #25D366; color: #073d1c; border-color: #1eb257; font-weight: 500; }
 
+/* ---------- schilderbeheer ---------- */
+.painterlist { margin-top: 8px; }
+.painterrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: #fff; border: 0.5px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
+.painter-archived { opacity: 0.6; }
+.painterrow-fields { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.painter-name { width: 180px; }
+.painter-phone { width: 150px; font-variant-numeric: tabular-nums; }
+.painterrow-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.linkbtn-danger { color: #a32d2d; border-color: #e8b4b4; }
+
 /* ---------- reacties-overzicht ---------- */
 .reacties { background: #fff; border: 0.5px solid var(--border); border-radius: 12px; padding: 4px 16px 8px; margin-top: 16px; }
 .reacties-kop { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 12px 0 6px; }
@@ -255,6 +265,10 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .stop-painters { font-size: 13px; color: var(--muted); margin-top: 2px; }
 .stop-count { color: var(--accent); }
 .stop-leg { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.stop-nav { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.stop-painter { white-space: nowrap; }
+.stop-icon { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; text-decoration: none; background: var(--accent-bg); color: var(--accent); }
+.stop-sep { color: var(--muted); }
 .gezien {
   flex-shrink: 0; font-size: 13px; padding: 7px 14px; border-radius: 999px;
   border: 0.5px solid var(--border-strong); background: #fff; color: var(--muted);

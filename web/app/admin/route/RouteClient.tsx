@@ -3,13 +3,17 @@
 import { useState, useTransition } from "react";
 import { buildRouteAction, markVisited } from "./actions";
 
+export type StopPainter = { name: string; phone: string | null };
+
 export type StopView = {
   id: string;
   seq: number;
   dagdeel: string;
   time: string;
   address: string;
-  painters: string[];
+  lat: number;
+  lng: number;
+  painters: StopPainter[];
   legKm: number | null;
   visited: boolean;
 };
@@ -48,16 +52,41 @@ function StopCard({ stop }: { stop: StopView }) {
     });
   }
 
+  const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`;
+
   return (
     <div className={`stopcard${visited ? " stop-done" : ""}`}>
       <div className="stop-time">{stop.time}</div>
       <div className="stop-body">
-        <div className="stop-addr">{stop.address}</div>
+        <div className="stop-addr">
+          {stop.address}
+          <a className="stop-nav" href={navUrl} target="_blank" rel="noreferrer" aria-label="Navigeer hierheen">
+            <span aria-hidden>➤</span> navigeer
+          </a>
+        </div>
         <div className="stop-painters">
-          {stop.painters.join(", ")}
-          {stop.painters.length > 1 ? (
-            <span className="stop-count"> · {stop.painters.length} schilders</span>
-          ) : null}
+          {stop.painters.map((p, i) => (
+            <span className="stop-painter" key={i}>
+              {p.name}
+              {p.phone ? (
+                <>
+                  <a className="stop-icon" href={`tel:${p.phone}`} aria-label={`Bel ${p.name}`}>
+                    bel
+                  </a>
+                  <a
+                    className="stop-icon"
+                    href={`https://wa.me/${p.phone.replace(/^\+/, "")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`WhatsApp ${p.name}`}
+                  >
+                    app
+                  </a>
+                </>
+              ) : null}
+              {i < stop.painters.length - 1 ? <span className="stop-sep"> · </span> : null}
+            </span>
+          ))}
         </div>
         {stop.legKm != null ? <div className="stop-leg">+{stop.legKm} km rijden</div> : null}
       </div>
