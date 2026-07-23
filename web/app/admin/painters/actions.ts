@@ -40,6 +40,25 @@ export async function setPainterActive(
   return { ok: true };
 }
 
+// Voeg een (spook)schilder samen met een andere: reacties/route verhuizen mee,
+// de bron wordt verwijderd. Handig als iemand met een typefout in z'n nummer
+// een dubbele self-report heeft aangemaakt.
+export async function mergePainters(
+  sourceId: string,
+  targetId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (sourceId === targetId) return { ok: false, error: "Kies twee verschillende schilders." };
+  const supabase = await supabaseServer();
+  const { error } = await supabase.rpc("merge_painter", {
+    p_source: sourceId,
+    p_target: targetId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/painters");
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
 // Definitief verwijderen. Lukt niet als de schilder al in een gebouwde route
 // zit — dan is archiveren de juiste keuze.
 export async function deletePainter(id: string): Promise<{ ok: boolean; error?: string }> {

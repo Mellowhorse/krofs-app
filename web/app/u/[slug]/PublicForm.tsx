@@ -73,6 +73,7 @@ export default function PublicForm({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [unknownPhone, setUnknownPhone] = useState<null | { noWork: boolean }>(null);
   const [done, setDone] = useState<null | "ok" | "nowork">(null);
 
   function toggle(v: string) {
@@ -84,8 +85,9 @@ export default function PublicForm({
     });
   }
 
-  async function submit(noWork: boolean) {
+  async function submit(noWork: boolean, allowNew = false) {
     setErr(null);
+    setUnknownPhone(null);
     if (!naam.trim()) return setErr("Vul je naam in.");
     if (!telefoon.trim()) return setErr("Vul je 06-nummer in.");
 
@@ -113,9 +115,11 @@ export default function PublicForm({
       plaats: addr.plaats,
       workdays,
       noWork,
+      allowNew,
     });
     setSubmitting(false);
     if (res.ok) setDone(noWork ? "nowork" : "ok");
+    else if (res.reason === "phone_unknown") setUnknownPhone({ noWork });
     else setErr(reasonNL(res.reason));
   }
 
@@ -193,7 +197,10 @@ export default function PublicForm({
             type="tel"
             inputMode="tel"
             value={telefoon}
-            onChange={(e) => setTelefoon(e.target.value)}
+            onChange={(e) => {
+              setTelefoon(e.target.value);
+              setUnknownPhone(null);
+            }}
             autoComplete="tel"
           />
 
@@ -219,6 +226,24 @@ export default function PublicForm({
           </div>
 
           {err ? <p className="err">{err}</p> : null}
+
+          {unknownPhone ? (
+            <div className="confirm-new">
+              <p>
+                Dit 06-nummer staat nog niet bij ons. Controleer of je nummer klopt —
+                of ga door als je nieuw bent.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={submitting}
+                onClick={() => submit(unknownPhone.noWork, true)}
+                style={{ marginTop: 8 }}
+              >
+                {submitting ? "Versturen…" : "Ja, ga door"}
+              </button>
+            </div>
+          ) : null}
 
           <button
             type="button"

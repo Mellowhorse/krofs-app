@@ -108,6 +108,7 @@ export type PublicSubmitArgs = {
   plaats?: string;
   workdays?: string[]; // yyyy-mm-dd
   noWork?: boolean;
+  allowNew?: boolean; // pas een onbekend nummer aanmaken na bevestiging
 };
 
 export async function submitPublicResponse(
@@ -123,6 +124,7 @@ export async function submitPublicResponse(
     p_plaats: args.plaats ?? null,
     p_workdays: args.workdays ?? null,
     p_no_work: args.noWork ?? false,
+    p_allow_new: args.allowNew ?? false,
   });
   if (error) {
     console.error("[submit_public_response]", error.message);

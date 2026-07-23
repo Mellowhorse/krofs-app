@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { updatePainter, setPainterActive, deletePainter } from "./actions";
+import { updatePainter, setPainterActive, deletePainter, mergePainters } from "./actions";
 
 export type PainterRow = {
   id: string;
@@ -11,13 +11,15 @@ export type PainterRow = {
   selfReport: boolean;
 };
 
-function Row({ row }: { row: PainterRow }) {
+function Row({ row, others }: { row: PainterRow; others: PainterRow[] }) {
   const [name, setName] = useState(row.name);
   const [phone, setPhone] = useState(row.phone);
   const [active, setActive] = useState(row.active);
   const [gone, setGone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [target, setTarget] = useState("");
   const [pending, start] = useTransition();
 
   const dirty = name !== row.name || phone !== row.phone;
@@ -58,6 +60,22 @@ function Row({ row }: { row: PainterRow }) {
       else setGone(true);
     });
   }
+  function doMerge() {
+    setErr(null);
+    const t = others.find((o) => o.id === target);
+    if (!t) return setErr("Kies een schilder om mee samen te voegen.");
+    if (
+      !window.confirm(
+        `"${row.name}" samenvoegen met "${t.name}"?\n\nDe reacties van "${row.name}" gaan naar "${t.name}" en "${row.name}" verdwijnt. Dit kan niet ongedaan worden gemaakt.`,
+      )
+    )
+      return;
+    start(async () => {
+      const res = await mergePainters(row.id, target);
+      if (!res.ok) setErr(res.error ?? "Samenvoegen mislukt.");
+      else setGone(true);
+    });
+  }
 
   if (gone) return null;
 
@@ -91,10 +109,36 @@ function Row({ row }: { row: PainterRow }) {
         <button className="btn-sm" onClick={toggleActive} disabled={pending}>
           {active ? "Archiveer" : "Activeer"}
         </button>
+        {others.length ? (
+          <button className="btn-sm" onClick={() => setMerging((m) => !m)} disabled={pending}>
+            Samenvoegen
+          </button>
+        ) : null}
         <button className="btn-sm linkbtn-danger" onClick={remove} disabled={pending}>
           Verwijder
         </button>
       </div>
+
+      {merging ? (
+        <div className="merge-panel">
+          <span className="muted" style={{ fontSize: 13 }}>Voeg samen met:</span>
+          <select value={target} onChange={(e) => setTarget(e.target.value)} className="merge-select">
+            <option value="">— kies schilder —</option>
+            {others.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name} {o.phone ? `(${o.phone})` : ""}
+              </option>
+            ))}
+          </select>
+          <button className="btn-sm btn-wa" onClick={doMerge} disabled={pending || !target}>
+            Voeg samen
+          </button>
+          <button className="btn-sm" onClick={() => setMerging(false)} disabled={pending}>
+            Annuleer
+          </button>
+        </div>
+      ) : null}
+
       {err ? <p className="err" style={{ width: "100%", margin: "6px 0 0" }}>{err}</p> : null}
     </div>
   );
@@ -113,7 +157,7 @@ export default function PaintersClient({ painters }: { painters: PainterRow[] })
   return (
     <div className="painterlist">
       {painters.map((p) => (
-        <Row key={p.id} row={p} />
+        <Row key={p.id} row={p} others={painters.filter((o) => o.id !== p.id)} />
       ))}
     </div>
   );

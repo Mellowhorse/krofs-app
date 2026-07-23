@@ -13,6 +13,7 @@ export type PublicFormArgs = {
   plaats?: string;
   workdays?: string[];
   noWork?: boolean;
+  allowNew?: boolean;
 };
 
 export async function submitPublicAction(
@@ -35,6 +36,7 @@ export async function submitPublicAction(
     plaats: args.plaats,
     workdays: args.workdays,
     noWork: args.noWork ?? false,
+    allowNew: args.allowNew ?? false,
   };
   return submitPublicResponse(payload);
 }

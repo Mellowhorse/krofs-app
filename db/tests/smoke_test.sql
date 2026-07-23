@@ -228,16 +228,16 @@ begin
   r := get_round_by_slug(slug);
   if (r->>'ok') <> 'true' then raise exception 'T8 slug resolve: %', r; end if;
 
-  -- unknown phone => a self-report painter is created
+  -- unknown phone WITH confirmation => a self-report painter is created
   r := submit_public_response(slug, 'Nieuwe Schilder', '+31611110001',
-        'Straat', '1', '1234 AB', 'Amersfoort', array[vws]::date[], false);
+        'Straat', '1', '1234 AB', 'Amersfoort', array[vws]::date[], false, true);
   if (r->>'ok') <> 'true' or (r->>'matched') <> 'false' then raise exception 'T8 create: %', r; end if;
   select count(*) into n from painters where org_id = v_org and wa_phone_e164 = '+31611110001';
   if n <> 1 then raise exception 'T8 painter not created (n=%)', n; end if;
 
   -- re-submit same phone => dedup (one painter, one invite), address updated
   r := submit_public_response(slug, 'Nieuwe Schilder', '+31611110001',
-        'Andereweg', '9', null, 'Baarn', array[vws]::date[], false);
+        'Andereweg', '9', null, 'Baarn', array[vws]::date[], false, true);
   if (r->>'ok') <> 'true' then raise exception 'T8 resubmit: %', r; end if;
   select count(*) into n from painters where org_id = v_org and wa_phone_e164 = '+31611110001';
   if n <> 1 then raise exception 'T8 dedup painter (n=%)', n; end if;
@@ -338,6 +338,52 @@ begin
   if not ok then raise exception 'T10 dag buiten beschikbaarheid werd geaccepteerd'; end if;
 
   raise notice 'T10 ok — bezoekweek-keuze en beschikbaarheid bewaakt';
+end $$;
+
+-- T11 — spookschilder-preventie + merge (db/013).
+do $$
+declare v_org uuid; v_rnd uuid; slug text; vws date; r jsonb; n int; src uuid; tgt uuid;
+begin
+  insert into organizations (name) values ('smoke-merge') returning id into v_org;
+  insert into weekrondes (org_id, label, status, sent_at)
+    values (v_org, 'merge', 'collecting', now()) returning id into v_rnd;
+  select visit_week_start, public_slug into vws, slug from weekrondes where id = v_rnd;
+
+  -- onbekend nummer zonder bevestiging => phone_unknown, GEEN painter aangemaakt
+  r := submit_public_response(slug, 'Piet', '+31600055501',
+        'Straat', '1', '1234 AB', 'Amersfoort', array[vws]::date[], false, false);
+  if (r->>'reason') <> 'phone_unknown' then raise exception 'T11 gate: %', r; end if;
+  select count(*) into n from painters where org_id = v_org and wa_phone_e164 = '+31600055501';
+  if n <> 0 then raise exception 'T11 painter aangemaakt ondanks gate (n=%)', n; end if;
+
+  -- met bevestiging => aangemaakt
+  r := submit_public_response(slug, 'Piet', '+31600055501',
+        'Straat', '1', '1234 AB', 'Amersfoort', array[vws]::date[], false, true);
+  if (r->>'ok') <> 'true' then raise exception 'T11 allow_new: %', r; end if;
+
+  -- roster-schilder (het "echte" record) + een spook op een typenummer
+  insert into painters (org_id, full_name, wa_phone_e164, wa_opt_in_status, is_active)
+    values (v_org, 'Piet de Echte', '+31600055500', 'opted_in', true) returning id into tgt;
+  select id into src from painters where org_id = v_org and wa_phone_e164 = '+31600055501';
+
+  -- simuleer een ingelogde beheerder (CI/lokaal heeft geen echte auth-sessie)
+  create or replace function auth.uid() returns uuid language sql stable as $x$
+    select '00000000-0000-0000-0000-0000000000aa'::uuid $x$;
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000aa', 'smoke-admin@test')
+    on conflict do nothing;
+  insert into app_admins (user_id, org_id) values ('00000000-0000-0000-0000-0000000000aa', v_org)
+    on conflict do nothing;
+
+  perform merge_painter(src, tgt);
+
+  if exists (select 1 from painters where id = src) then raise exception 'T11 bron niet verwijderd'; end if;
+  -- de reactie van het spook hangt nu aan het doel
+  if not exists (
+    select 1 from round_invites ri join invite_responses ir on ir.invite_id = ri.id
+    where ri.round_id = v_rnd and ri.painter_id = tgt
+  ) then raise exception 'T11 reactie niet verhuisd naar doel'; end if;
+
+  raise notice 'T11 ok — spookpreventie + merge';
 end $$;
 
 select 'ALL SMOKE TESTS PASSED' as result;
