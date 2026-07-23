@@ -13,7 +13,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
   const result = await runTick();
-  return NextResponse.json({ ok: true, ...result });
+  // Any phase error -> 500 so the scheduler (and a dead-man's-switch) sees red.
+  const ok = result.errors.length === 0;
+  return NextResponse.json({ ok, ...result }, { status: ok ? 200 : 500 });
 }
 
 export function GET() {

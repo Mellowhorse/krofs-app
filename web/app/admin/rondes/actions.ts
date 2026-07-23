@@ -86,3 +86,28 @@ export async function closeRonde(
   revalidatePath("/admin");
   return { ok: true };
 }
+
+// Verkeerd gestarte ronde helemaal weggooien (incl. reacties), zodat Kees
+// opnieuw kan beginnen. Alleen toegestaan zolang de ronde nog verzamelt — een
+// gesloten/geroute ronde bevat resultaten die je niet per ongeluk wilt wissen.
+export async function cancelRonde(
+  roundId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await supabaseServer();
+  const { data: round } = await supabase
+    .from("weekrondes")
+    .select("status")
+    .eq("id", roundId)
+    .maybeSingle();
+  if (!round) return { ok: false, error: "Ronde niet gevonden." };
+  if (round.status !== "collecting" && round.status !== "sending") {
+    return { ok: false, error: "Deze ronde is al gesloten en kan niet meer worden geannuleerd." };
+  }
+  // Cascade ruimt invites/reacties/werkdagen op; een verzamelende ronde heeft
+  // nog geen route, dus geen route_plans om eerst te verwijderen.
+  const { error } = await supabase.from("weekrondes").delete().eq("id", roundId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/rondes");
+  revalidatePath("/admin");
+  return { ok: true };
+}

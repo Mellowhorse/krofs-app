@@ -197,6 +197,16 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .reactie-dagen { display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; }
 .dagpil { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); white-space: nowrap; }
 
+.banner-link { display: block; margin: 12px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--accent-bg); border: 0.5px solid var(--accent-border); color: var(--accent); font-size: 14px; font-weight: 500; text-decoration: none; }
+.banner-link:hover { background: #fbe3d8; }
+.badge-accent { background: var(--accent-bg); color: var(--accent); }
+
+.meer-opties { margin-top: 14px; }
+.meer-opties > summary { font-size: 13px; color: var(--muted); cursor: pointer; list-style: none; }
+.meer-opties > summary::-webkit-details-marker { display: none; }
+.meer-opties > summary::before { content: "▸ "; }
+.meer-opties[open] > summary::before { content: "▾ "; }
+
 /* ---------- nog geen reactie ---------- */
 .missing { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--border); }
 .missing-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

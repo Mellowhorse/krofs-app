@@ -7,6 +7,7 @@ import {
   dispatchNow,
   regenerateLinks,
   closeRonde,
+  cancelRonde,
   type SendLink,
 } from "./actions";
 
@@ -270,9 +271,29 @@ export default function RondeClient({
   }
   function doClose(id: string) {
     setError(null);
+    if (
+      !window.confirm(
+        "Uitvraag nu sluiten?\n\nDe deelbare link werkt daarna niet meer, dus schilders kunnen niet meer invullen. De reacties blijven bewaard zodat je de route kunt bouwen.",
+      )
+    )
+      return;
     start(async () => {
       const res = await closeRonde(id);
       if (!res.ok) setError(res.error ?? "Sluiten mislukt.");
+      else location.reload();
+    });
+  }
+  function doCancel(id: string) {
+    setError(null);
+    if (
+      !window.confirm(
+        "Ronde annuleren en verwijderen?\n\nDe hele ronde én alle reacties worden gewist. Gebruik dit als je per ongeluk de verkeerde week of dagen koos. Dit kan niet ongedaan worden gemaakt.",
+      )
+    )
+      return;
+    start(async () => {
+      const res = await cancelRonde(id);
+      if (!res.ok) setError(res.error ?? "Annuleren mislukt.");
       else location.reload();
     });
   }
@@ -305,27 +326,45 @@ export default function RondeClient({
               className="btn btn-ghost"
               style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
               disabled={pending}
-              onClick={() => doRegen(active.id)}
-            >
-              Persoonlijke links (los van de verzendlijst)
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
-              disabled={pending}
-              onClick={doDispatch}
-            >
-              {pending ? "Bezig…" : "Automatisch versturen (Meta)"}
-            </button>
-            <button
-              className="btn btn-ghost"
-              style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
-              disabled={pending}
               onClick={() => doClose(active.id)}
             >
-              Sluit ronde
+              Uitvraag nu sluiten
+            </button>
+            <button
+              className="btn btn-ghost"
+              style={{ width: "auto", padding: "9px 16px", marginTop: 0, color: "#a32d2d", borderColor: "#e8b4b4" }}
+              disabled={pending}
+              onClick={() => doCancel(active.id)}
+            >
+              Ronde annuleren
             </button>
           </div>
+
+          <details className="meer-opties">
+            <summary>Meer opties</summary>
+            <div className="row-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <button
+                className="btn btn-ghost"
+                style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
+                disabled={pending}
+                onClick={() => doRegen(active.id)}
+              >
+                Persoonlijke links tonen
+              </button>
+              <button
+                className="btn btn-ghost"
+                style={{ width: "auto", padding: "9px 16px", marginTop: 0 }}
+                disabled={pending}
+                onClick={doDispatch}
+              >
+                {pending ? "Bezig…" : "Automatisch versturen (Meta)"}
+              </button>
+            </div>
+            <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Voor de meeste rondes niet nodig — je deelt gewoon de link hierboven in je
+              WhatsApp-verzendlijst.
+            </p>
+          </details>
         </div>
       ) : (
         <NieuweRonde

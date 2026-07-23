@@ -21,12 +21,19 @@ function toIds(data: unknown): string[] {
   );
 }
 
+// Throw on a Supabase error so a broken sweep surfaces instead of silently
+// reporting success. Callers run inside runTick's per-phase try/catch.
+function orThrow<T>(res: { data: T; error: { message: string } | null }, ctx: string): T {
+  if (res.error) throw new Error(`${ctx}: ${res.error.message}`);
+  return res.data;
+}
+
 async function dispatchKind(
   kind: "invite" | "reminder",
   idFn: "pending_invite_ids" | "due_reminder_ids",
 ) {
   const guard = newSender();
-  const { data: rawIds } = await admin.rpc(idFn, { p_limit: 200 });
+  const rawIds = orThrow(await admin.rpc(idFn, { p_limit: 200 }), idFn);
   const ids = toIds(rawIds);
 
   let sent = 0;
@@ -41,31 +48,41 @@ async function dispatchKind(
     const row = ((claim ?? []) as ClaimRow[])[0];
     if (!row) continue; // already sent / skipped
 
-    const link = `${BASE}/r/${row.raw_token}`;
-    const res = await sendInvite(guard, {
-      to: row.to_phone,
-      firstName: row.full_name.split(" ")[0],
-      link,
-      kind,
-    });
+    try {
 
-    if (res.ok) {
+      const link = `${BASE}/r/${row.raw_token}`;
+      const res = await sendInvite(guard, {
+        to: row.to_phone,
+        firstName: row.full_name.split(" ")[0],
+        link,
+        kind,
+      });
+
+      if (res.ok) {
+        await admin
+          .from("message_log")
+          .update({
+            status: "sent",
+            provider_message_id: res.providerId,
+            provider: res.simulated ? "sandbox" : "meta",
+          })
+          .eq("id", row.message_id);
+        sent++;
+      } else {
+        await admin
+          .from("message_log")
+          .update({ status: "failed", error_code: res.error.slice(0, 100) })
+          .eq("id", row.message_id);
+        if (res.blocked) blocked++;
+        else failed++;
+      }
+    } catch (e) {
+      // one bad send must not abort the whole batch
       await admin
         .from("message_log")
-        .update({
-          status: "sent",
-          provider_message_id: res.providerId,
-          provider: res.simulated ? "sandbox" : "meta",
-        })
+        .update({ status: "failed", error_code: (e instanceof Error ? e.message : "fout").slice(0, 100) })
         .eq("id", row.message_id);
-      sent++;
-    } else {
-      await admin
-        .from("message_log")
-        .update({ status: "failed", error_code: res.error.slice(0, 100) })
-        .eq("id", row.message_id);
-      if (res.blocked) blocked++;
-      else failed++;
+      failed++;
     }
   }
   return { mode: guard.mode, candidates: ids.length, sent, blocked, failed };
@@ -78,7 +95,7 @@ export function sendReminders() {
   return dispatchKind("reminder", "due_reminder_ids");
 }
 export async function closeDueRounds() {
-  const { data } = await admin.rpc("close_due_rounds");
+  const data = orThrow(await admin.rpc("close_due_rounds"), "close_due_rounds");
   return { closed: (data as number) ?? 0 };
 }
 
@@ -91,10 +108,10 @@ type GeoAddr = {
 };
 
 export async function geocodeResponses(limit = 20) {
-  const { data } = await admin.rpc("claim_geocode_batch", {
-    p_limit: limit,
-    p_lease_seconds: 120,
-  });
+  const data = orThrow(
+    await admin.rpc("claim_geocode_batch", { p_limit: limit, p_lease_seconds: 120 }),
+    "claim_geocode_batch",
+  );
   const rows = (data ?? []) as GeoAddr[];
   const provider =
     process.env.GEOCODE_PROVIDER === "stub" ? "stub" : hasGoogleKey() ? "google" : "pdok";
@@ -148,10 +165,30 @@ export async function geocodeResponses(limit = 20) {
   return { provider, claimed: rows.length, ok, review, retry };
 }
 
+// Each phase runs isolated: a failure in one (e.g. a geocoding outage) is
+// recorded in `errors` but must not stop the others — closing due rounds always
+// runs. A non-empty `errors` lets /api/tick answer 500 so the scheduler alerts.
 export async function runTick() {
-  const invites = await dispatchInvites();
-  const reminders = await sendReminders();
-  const geocode = await geocodeResponses();
-  const closed = await closeDueRounds();
-  return { invites, reminders, geocode, ...closed };
+  const errors: string[] = [];
+  async function phase<T>(name: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      errors.push(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+      return fallback;
+    }
+  }
+
+  const invites = await phase("invites", dispatchInvites, {
+    mode: "error", candidates: 0, sent: 0, blocked: 0, failed: 0,
+  });
+  const reminders = await phase("reminders", sendReminders, {
+    mode: "error", candidates: 0, sent: 0, blocked: 0, failed: 0,
+  });
+  const geocode = await phase("geocode", () => geocodeResponses(), {
+    provider: "error", claimed: 0, ok: 0, review: 0, retry: 0,
+  });
+  const closed = await phase("close", closeDueRounds, { closed: 0 });
+
+  return { invites, reminders, geocode, ...closed, errors };
 }

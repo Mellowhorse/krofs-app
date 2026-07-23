@@ -38,7 +38,22 @@ type Cluster = {
   members: Member[];
 };
 
-type PlacedStop = Cluster & {
+// Een stop = één adres op één dag, met de schilders die dáár die dag bezocht
+// worden. Een adres kan zo over meerdere dagen worden gesplitst als de schilders
+// er niet allemaal op dezelfde dag zijn.
+type StopGroup = {
+  key: string;
+  lat: number;
+  lng: number;
+  straat: string;
+  huisnummer: string;
+  postcode: string | null;
+  plaats: string;
+  members: Member[];
+  date: string; // yyyy-mm-dd
+};
+
+type PlacedStop = StopGroup & {
   seq: number;
   dagdeel: "ochtend" | "middag";
   planned_start: string; // ISO
@@ -192,33 +207,70 @@ function clusterResponses(
   return [...byKey.values()];
 }
 
-// Pick the single visit date for a cluster: the workday shared by the most
-// members (ties -> earliest date).
-function chooseVisitDate(c: Cluster): string {
-  const tally = new Map<string, number>();
-  for (const m of c.members)
-    for (const d of m.workdays) tally.set(d, (tally.get(d) ?? 0) + 1);
-  let best = "";
-  let bestN = -1;
-  for (const [d, n] of [...tally.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (n > bestN) {
-      bestN = n;
-      best = d;
+// Assign every painter to exactly one of their workdays and turn clusters into
+// per-day stops. Painters at the same address on the same day become one group
+// stop; a cluster whose members share no day is split across days. Ties on
+// coverage go to the LEAST-loaded day so stops spread over the admin's available
+// days instead of all piling on the earliest one.
+function assignStops(clusters: Cluster[]): StopGroup[] {
+  const dayLoad = new Map<string, number>(); // stops already placed per day
+  const out: StopGroup[] = [];
+
+  for (const c of clusters) {
+    let remaining = [...c.members];
+    while (remaining.length) {
+      const tally = new Map<string, number>();
+      for (const m of remaining)
+        for (const d of m.workdays) tally.set(d, (tally.get(d) ?? 0) + 1);
+      if (tally.size === 0) break; // members without any workday (defensive)
+
+      let day = "";
+      let bestN = -1;
+      for (const [d, n] of tally) {
+        let better = day === "";
+        if (!better && n > bestN) better = true;
+        else if (!better && n === bestN) {
+          const load = dayLoad.get(d) ?? 0;
+          const bestLoad = dayLoad.get(day) ?? 0;
+          if (load < bestLoad) better = true;
+          else if (load === bestLoad && d < day) better = true;
+        }
+        if (better) {
+          day = d;
+          bestN = n;
+        }
+      }
+
+      const group = remaining.filter((m) => m.workdays.has(day));
+      out.push({
+        key: c.key,
+        lat: c.lat,
+        lng: c.lng,
+        straat: c.straat,
+        huisnummer: c.huisnummer,
+        postcode: c.postcode,
+        plaats: c.plaats,
+        members: group,
+        date: day,
+      });
+      dayLoad.set(day, (dayLoad.get(day) ?? 0) + 1);
+      const chosen = new Set(group);
+      remaining = remaining.filter((m) => !chosen.has(m));
     }
   }
-  return best;
+  return out;
 }
 
 // Nearest-neighbour order from IKEA, then pack into wall-clock slots.
 async function placeDay(
-  clusters: Cluster[],
+  clusters: StopGroup[],
   date: string,
   tz: string,
   dayStartMin: number,
   splitMin: number,
 ): Promise<{ stops: PlacedStop[]; totalDist: number; endMin: number }> {
   const remaining = [...clusters];
-  const ordered: Cluster[] = [];
+  const ordered: StopGroup[] = [];
   let curLat = IKEA_LAT;
   let curLng = IKEA_LNG;
   while (remaining.length) {
@@ -342,14 +394,14 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
 
   const clusters = clusterResponses(rows);
 
-  // Group clusters by their chosen visit date.
-  const byDate = new Map<string, Cluster[]>();
-  for (const c of clusters) {
-    const date = chooseVisitDate(c);
-    if (!date) continue;
-    const list = byDate.get(date) ?? [];
-    list.push(c);
-    byDate.set(date, list);
+  // Turn clusters into per-day stops, spread over the admin's available days,
+  // then group by date.
+  const byDate = new Map<string, StopGroup[]>();
+  for (const s of assignStops(clusters)) {
+    if (!s.date) continue;
+    const list = byDate.get(s.date) ?? [];
+    list.push(s);
+    byDate.set(s.date, list);
   }
   const dates = [...byDate.keys()].sort();
 
@@ -399,7 +451,7 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
             planned_end: s.planned_end,
             lat: s.lat,
             lng: s.lng,
-            cluster_key: s.key,
+            cluster_key: `${s.key}@${date}`,
             straat: s.straat,
             huisnummer: s.huisnummer,
             postcode: s.postcode,
