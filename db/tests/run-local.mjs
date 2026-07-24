@@ -30,6 +30,7 @@ const FILES = [
   "db/013_ghost_prevention_merge.sql",
   "db/014_max_visits_per_day.sql",
   "db/015_visit_day_parts.sql",
+  "db/016_settings.sql",
   "db/seed_dev.sql",
   "db/tests/smoke_test.sql",
 ];

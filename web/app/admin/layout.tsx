@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { signOut } from "../login/actions";
@@ -52,6 +53,9 @@ export default async function AdminLayout({
         </div>
         <div className="adminbar-right">
           <span className="who">{admin.display_name ?? user.email}</span>
+          <Link className="linkbtn" href="/admin/instellingen">
+            Instellingen
+          </Link>
           <form action={signOut}>
             <button className="linkbtn" type="submit">
               Uitloggen

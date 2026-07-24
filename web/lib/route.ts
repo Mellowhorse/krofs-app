@@ -16,7 +16,6 @@ import { IKEA_LAT, IKEA_LNG, haversineMeters, hasGoogleKey } from "./geocode";
 // pipeline runs without a key — same pattern as lib/geocode.
 // ---------------------------------------------------------------------------
 
-const VISIT_MINUTES = 30;
 const ROAD_FACTOR = 1.3; // straight-line -> road distance fudge for the stub
 const STUB_SPEED_KMH = 45; // effective NL mixed-road speed for the stub
 
@@ -279,11 +278,14 @@ async function placeDay(
   tz: string,
   dayStartMin: number,
   splitMin: number,
+  startLat: number,
+  startLng: number,
+  visitMin: number,
 ): Promise<{ stops: PlacedStop[]; totalDist: number; endMin: number }> {
   const remaining = [...clusters];
   const ordered: StopGroup[] = [];
-  let curLat = IKEA_LAT;
-  let curLng = IKEA_LNG;
+  let curLat = startLat;
+  let curLng = startLng;
   while (remaining.length) {
     let bi = 0;
     let bd = Infinity;
@@ -301,8 +303,8 @@ async function placeDay(
   }
 
   const stops: PlacedStop[] = [];
-  let prevLat = IKEA_LAT;
-  let prevLng = IKEA_LNG;
+  let prevLat = startLat;
+  let prevLng = startLng;
   let t = dayStartMin;
   let totalDist = 0;
   for (let i = 0; i < ordered.length; i++) {
@@ -311,7 +313,7 @@ async function placeDay(
     totalDist += l.distance_m;
     t += Math.ceil(l.duration_s / 60);
     const startMin = t;
-    const endMin = t + VISIT_MINUTES;
+    const endMin = t + visitMin;
     stops.push({
       ...c,
       seq: i + 1,
@@ -328,9 +330,9 @@ async function placeDay(
   return { stops, totalDist, endMin: t };
 }
 
-function mapsUrl(stops: PlacedStop[]): string {
+function mapsUrl(stops: PlacedStop[], startLat: number, startLng: number): string {
   const pt = (lat: number, lng: number) => `${lat},${lng}`;
-  const origin = pt(IKEA_LAT, IKEA_LNG);
+  const origin = pt(startLat, startLng);
   if (stops.length === 0) return `https://www.google.com/maps/?q=${origin}`;
   const dest = pt(stops[stops.length - 1].lat, stops[stops.length - 1].lng);
   const mid = stops.slice(0, -1).map((s) => pt(s.lat, s.lng));
@@ -348,7 +350,7 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
   // Org settings for the wall-clock window.
   const { data: round } = await admin
     .from("weekrondes")
-    .select("id, org_id, visit_day_parts, organizations(timezone, day_start_local, dagdeel_split_local, max_working_minutes, max_visits_per_day)")
+    .select("id, org_id, visit_day_parts, organizations(timezone, day_start_local, dagdeel_split_local, max_working_minutes, max_visits_per_day, visit_minutes, start_lat, start_lng)")
     .eq("id", roundId)
     .single();
   if (!round) return { ok: false, error: "ronde niet gevonden" };
@@ -358,6 +360,9 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
     dagdeel_split_local: string;
     max_working_minutes: number;
     max_visits_per_day: number;
+    visit_minutes: number;
+    start_lat: number;
+    start_lng: number;
   };
   const rawOrg = (round as unknown as { organizations: OrgShape | OrgShape[] }).organizations;
   const org = Array.isArray(rawOrg) ? rawOrg[0] : rawOrg;
@@ -366,6 +371,9 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
   const splitMin = hhmmToMinutes(org.dagdeel_split_local);
   const maxMin = org.max_working_minutes;
   const cap = org.max_visits_per_day || 10;
+  const visitMin = org.visit_minutes || 30;
+  const startLat = org.start_lat ?? IKEA_LAT;
+  const startLng = org.start_lng ?? IKEA_LNG;
 
   // Dagdeel per werkdag (db/015). Leeg/onbekend => hele dag, zodat oudere
   // rondes zich gedragen als voorheen.
@@ -384,7 +392,7 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
     return { start: dayStartMin, end: dayEndMin };
   }
   // Ruwe schatting voor de verdeling: bezoek + gemiddelde reistijd.
-  const PER_STOP_EST = VISIT_MINUTES + 15;
+  const PER_STOP_EST = visitMin + 15;
   function capForDay(ymd: string): number {
     const w = windowOf(ymd);
     return Math.max(1, Math.min(cap, Math.floor((w.end - w.start) / PER_STOP_EST)));
@@ -460,7 +468,9 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
     for (const date of dates) {
       const dayClusters = byDate.get(date)!;
       const win = windowOf(date);
-      const { stops, totalDist, endMin } = await placeDay(dayClusters, date, tz, win.start, splitMin);
+      const { stops, totalDist, endMin } = await placeDay(
+        dayClusters, date, tz, win.start, splitMin, startLat, startLng, visitMin,
+      );
       const durationS = (endMin - win.start) * 60;
       // "vol" = boven het dagmaximum (aantal) óf buiten het dagvenster (tijd)
       const oversub = stops.length > capForDay(date) || endMin > win.end;
@@ -471,12 +481,12 @@ export async function buildRoute(roundId: string): Promise<BuildResult> {
           route_plan_id: planId,
           round_id: roundId,
           visit_date: date,
-          start_lat: IKEA_LAT,
-          start_lng: IKEA_LNG,
+          start_lat: startLat,
+          start_lng: startLng,
           total_distance_m: totalDist,
           total_duration_s: durationS,
           is_oversubscribed: oversub,
-          google_maps_url: mapsUrl(stops),
+          google_maps_url: mapsUrl(stops, startLat, startLng),
         })
         .select("id")
         .single();

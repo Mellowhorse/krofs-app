@@ -216,6 +216,11 @@ code { background: var(--bg); padding: 1px 6px; border-radius: 5px; font-size: 1
 .banner-link:hover { background: #fbe3d8; }
 .badge-accent { background: var(--accent-bg); color: var(--accent); }
 
+/* ---------- instellingen ---------- */
+.sel { width: 100%; padding: 9px 11px; font-size: 14px; border-radius: 10px; border: 0.5px solid var(--border-strong); background: #fff; color: var(--text); }
+.startrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 0.5px solid var(--border); border-radius: 10px; font-size: 14px; }
+.startedit { padding: 12px; border: 0.5px solid var(--border); border-radius: 10px; }
+
 /* ---------- dagkeuze bij ronde starten ---------- */
 .dagkeuze { margin-top: 4px; }
 .dagrij { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 4px; border-radius: 10px; }
