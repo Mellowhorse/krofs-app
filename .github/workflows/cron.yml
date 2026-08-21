@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: POST /api/tick
         env:
-          TICK_URL: https://krofs-app.vercel.app/api/tick
+          TICK_URL: https://bezoek.krofs.nl/api/tick
           CRON_SECRET: ${{ secrets.CRON_SWEEP_SECRET }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
