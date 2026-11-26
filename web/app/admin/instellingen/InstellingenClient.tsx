@@ -101,8 +101,8 @@ export default function InstellingenClient({ initial }: { initial: Settings }) {
       <div className="seclabel">Uitvraag</div>
       <p className="flabel">Schilders krijgen</p>
       <select className="sel" style={{ maxWidth: 220 }} value={s.deadlineDays} onChange={(e) => set("deadlineDays", +e.target.value)}>
-        {[3, 4, 5, 7].map((v) => (
-          <option key={v} value={v}>{v} dagen</option>
+        {[1, 2, 3, 4, 5, 7].map((v) => (
+          <option key={v} value={v}>{v === 1 ? "1 dag" : `${v} dagen`}</option>
         ))}
       </select>
       <p className="muted" style={{ fontSize: 13, margin: "6px 0 18px" }}>
