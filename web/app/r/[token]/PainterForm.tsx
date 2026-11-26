@@ -177,7 +177,7 @@ export default function PainterForm({
 
           <h1>Hoi{firstName ? ` ${firstName}` : ""},</h1>
           <p className="intro">
-            Kees komt binnenkort bij je langs. Laat weten waar je
+            We komen deze week even bij je langs. Laat weten waar je
             werkt in de week van {weekLabel} en op welke dagen.
           </p>
 
