@@ -165,7 +165,7 @@ export default function PainterForm({
   return (
     <div className="wrap">
       <div className="card">
-        <div className="urlbar">&#128274; krofs-planner.nl/r/…</div>
+        <div className="urlbar">&#128274; bezoek.krofs.nl/r/…</div>
         <div className="body">
           <div className="brand">
             <div className="logo">K</div>
