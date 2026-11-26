@@ -167,7 +167,7 @@ export default function PublicForm({
   return (
     <div className="wrap">
       <div className="card">
-        <div className="urlbar">&#128274; krofs-planner.nl/u/…</div>
+        <div className="urlbar">&#128274; bezoek.krofs.nl/u/…</div>
         <div className="body">
           <div className="brand">
             <div className="logo">K</div>
